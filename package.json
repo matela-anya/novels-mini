@@ -1,0 +1,21 @@
+{
+  "name": "novels-mini",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^6.x",
+    "@vercel/postgres": "^0.5.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.x",
+    "vite": "^4.x"
+  }
+}
