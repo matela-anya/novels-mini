@@ -1,5 +1,8 @@
 import React, { useEffect, useState } from 'react';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { initTelegramApp } from './utils/telegram';
+import Home from './pages/Home';
+import Novel from './pages/Novel';
 
 const App = () => {
   const [isLoading, setIsLoading] = useState(true);
@@ -28,10 +31,12 @@ const App = () => {
   }
 
   return (
-    <div className="container mx-auto p-4">
-      <h1>Novel Reader</h1>
-      {/* Router content will go here */}
-    </div>
+    <Router>
+      <Routes>
+        <Route path="/" element={<Home />} />
+        <Route path="/novel/:id" element={<Novel />} />
+      </Routes>
+    </Router>
   );
 };
 
