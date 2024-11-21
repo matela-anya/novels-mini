@@ -10,6 +10,43 @@ const StatCard = ({ title, value }) => (
   </div>
 );
 
+const NovelCard = ({ novel }) => (
+  <Link 
+    to={`/novel/${novel.id}`}
+    className="block p-4 hover:bg-gray-50 transition-colors border-b last:border-b-0"
+    onClick={() => hapticFeedback.selectionChanged()}
+  >
+    <div className="flex justify-between items-start mb-2">
+      <h3 className="font-medium">{novel.title}</h3>
+      <span className="text-sm text-gray-500">
+        {novel.chapters_count} глав
+      </span>
+    </div>
+    
+    <div className="flex items-center text-sm text-gray-600">
+      <span className={`
+        px-2 py-0.5 rounded-full text-xs mr-2
+        ${novel.status === 'завершён' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}
+      `}>
+        {novel.status}
+      </span>
+      
+      {novel.tags?.length > 0 && (
+        <div className="flex gap-1">
+          {novel.tags.slice(0, 3).map(tag => (
+            <span key={tag} className="text-gray-500">
+              #{tag}
+            </span>
+          ))}
+          {novel.tags.length > 3 && (
+            <span className="text-gray-500">...</span>
+          )}
+        </div>
+      )}
+    </div>
+  </Link>
+);
+
 const Translator = () => {
   const { id } = useParams();
   const [translator, setTranslator] = React.useState(null);
@@ -85,10 +122,20 @@ const Translator = () => {
               <h1 className="text-xl font-bold mb-1">{translator.name}</h1>
               <div className="text-gray-600">переводчик</div>
             </div>
+            
+            <Link 
+              to={`/translator/${id}/edit`}
+              className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+              onClick={() => hapticFeedback.impactOccurred('light')}
+            >
+              Редактировать
+            </Link>
           </div>
 
           {translator.description && (
-            <p className="text-gray-700 mb-4">{translator.description}</p>
+            <p className="text-gray-700 whitespace-pre-line">
+              {translator.description}
+            </p>
           )}
         </div>
 
@@ -96,63 +143,46 @@ const Translator = () => {
         <div className="grid grid-cols-3 gap-4 mb-8">
           <StatCard 
             title="Новелл" 
-            value={translator.stats?.novels_count || 0} 
+            value={translator.stats.novels_count || 0} 
           />
           <StatCard 
             title="Страниц" 
-            value={translator.stats?.pages_count || 0} 
+            value={translator.stats.pages_count || 0} 
           />
           <StatCard 
             title="Лайков" 
-            value={translator.stats?.likes_count || 0} 
+            value={translator.stats.likes_count || 0} 
           />
         </div>
 
         {/* Список новелл */}
-        <div className="bg-white rounded-lg shadow-sm overflow-hidden mb-6">
+        <div className="bg-white rounded-lg shadow-sm overflow-hidden">
           <div className="p-4 bg-gray-50 border-b">
             <h2 className="font-semibold">Переводы</h2>
           </div>
           
-          <div className="divide-y">
-            {translator.novels?.map(novel => (
-              <Link 
-                key={novel.id}
-                to={`/novel/${novel.id}`}
-                className="block p-4 hover:bg-gray-50 transition-colors"
-                onClick={() => hapticFeedback.selectionChanged()}
-              >
-                <div className="flex justify-between items-start mb-2">
-                  <h3 className="font-medium">{novel.title}</h3>
-                  <span className="text-sm text-gray-500">
-                    {novel.chapters_count} глав
-                  </span>
-                </div>
-                
-                <div className="flex items-center text-sm text-gray-600">
-                  <span className={`
-                    px-2 py-0.5 rounded-full text-xs mr-2
-                    ${novel.status === 'завершён' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}
-                  `}>
-                    {novel.status}
-                  </span>
-                  
-                  {novel.tags?.length > 0 && (
-                    <div className="flex gap-1">
-                      {novel.tags.slice(0, 3).map(tag => (
-                        <span key={tag} className="text-gray-500">
-                          #{tag}
-                        </span>
-                      ))}
-                      {novel.tags.length > 3 && (
-                        <span className="text-gray-500">...</span>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </Link>
-            ))}
+          <div>
+            {translator.novels?.length > 0 ? (
+              translator.novels.map(novel => (
+                <NovelCard key={novel.id} novel={novel} />
+              ))
+            ) : (
+              <div className="p-8 text-center text-gray-500">
+                Пока нет переводов
+              </div>
+            )}
           </div>
+        </div>
+
+        {/* Добавление новой новеллы */}
+        <div className="mt-6 text-center">
+          <Link
+            to="/novel/new"
+            className="inline-block px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+            onClick={() => hapticFeedback.impactOccurred('light')}
+          >
+            + Добавить новеллу
+          </Link>
         </div>
       </div>
     </div>
