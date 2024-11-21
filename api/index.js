@@ -96,7 +96,26 @@ export default async function handler(request) {
         if (rows.length === 0) {
           return new Response('Not Found', { status: 404 });
         }
-        return respondJSON(rows[0]);
+
+        // Проверяем лайк пользователя, если userId предоставлен
+        const { searchParams } = url;
+        const userId = searchParams.get('userId');
+        let userHasLiked = false;
+
+        if (userId) {
+          const { rows: [likeStatus] } = await sql`
+            SELECT EXISTS (
+              SELECT 1 FROM novel_likes
+              WHERE novel_id = ${novelId} AND user_id = ${userId}
+            ) as liked
+          `;
+          userHasLiked = likeStatus.liked;
+        }
+
+        return respondJSON({
+          ...rows[0],
+          user_has_liked: userHasLiked
+        });
       }
 
       // Глава новеллы
@@ -124,6 +143,25 @@ export default async function handler(request) {
           return new Response('Not Found', { status: 404 });
         }
         return respondJSON(rows[0]);
+      }
+
+      // Комментарии к главе
+      const commentsMatch = path.match(/^\/api\/novels\/(\d+)\/chapters\/(\d+)\/comments$/);
+      if (commentsMatch) {
+        const [, novelId, chapterId] = commentsMatch;
+        
+        const { rows: comments } = await sql`
+          SELECT 
+            c.*,
+            u.name as user_name,
+            u.photo_url as user_photo
+          FROM chapter_comments c
+          JOIN users u ON u.id = c.user_id
+          WHERE c.chapter_id = ${chapterId}
+          ORDER BY c.created_at DESC;
+        `;
+
+        return respondJSON(comments);
       }
 
       // Профиль переводчика
@@ -182,7 +220,6 @@ export default async function handler(request) {
         return respondJSON(rows[0]);
       }
     }
-
     // POST запросы
     if (request.method === 'POST') {
       // Создание новеллы
@@ -228,33 +265,190 @@ export default async function handler(request) {
 
         return respondJSON(novel);
       }
-    }
 
-    // PUT запросы
-    if (request.method === 'PUT') {
-      // Обновление профиля переводчика
-      const translatorMatch = path.match(/^\/api\/translators\/(\d+)$/);
-      if (translatorMatch) {
-        const [, translatorId] = translatorMatch;
+      // Создание главы
+      const chapterCreateMatch = path.match(/^\/api\/novels\/(\d+)\/chapters$/);
+      if (chapterCreateMatch) {
+        const [, novelId] = chapterCreateMatch;
         const data = await request.json();
         
-        const { rows } = await sql`
-          UPDATE translators 
-          SET 
-            name = ${data.name},
-            description = ${data.description}
-          WHERE id = ${translatorId}
+        const { rows: [chapter] } = await sql`
+          INSERT INTO chapters (
+            novel_id,
+            number,
+            title,
+            content
+          ) VALUES (
+            ${novelId},
+            ${data.number},
+            ${data.title},
+            ${data.content}
+          )
           RETURNING *;
         `;
-        if (rows.length === 0) {
-          return new Response('Not Found', { status: 404 });
+
+        return respondJSON(chapter);
+      }
+
+      // Добавление комментария
+      const commentCreateMatch = path.match(/^\/api\/novels\/(\d+)\/chapters\/(\d+)\/comments$/);
+      if (commentCreateMatch) {
+        const [, novelId, chapterId] = commentCreateMatch;
+        const data = await request.json();
+
+        const { rows: [comment] } = await sql`
+          INSERT INTO chapter_comments (
+            chapter_id,
+            user_id,
+            content,
+            created_at
+          ) VALUES (
+            ${chapterId},
+            ${data.userId},
+            ${data.content},
+            CURRENT_TIMESTAMP
+          )
+          RETURNING *;
+        `;
+
+        // Получаем информацию о пользователе для ответа
+        const { rows: [commentWithUser] } = await sql`
+          SELECT 
+            c.*,
+            u.name as user_name,
+            u.photo_url as user_photo
+          FROM chapter_comments c
+          JOIN users u ON u.id = c.user_id
+          WHERE c.id = ${comment.id}
+        `;
+
+        return respondJSON(commentWithUser);
+      }
+
+      // Поставить/убрать лайк
+      const likeMatch = path.match(/^\/api\/novels\/(\d+)\/like$/);
+      if (likeMatch) {
+        const [, novelId] = likeMatch;
+        const data = await request.json();
+        const userId = data.userId;
+
+        // Проверяем существующий лайк
+        const { rows: likes } = await sql`
+          SELECT * FROM novel_likes
+          WHERE novel_id = ${novelId} AND user_id = ${userId}
+        `;
+
+        if (likes.length > 0) {
+          // Убираем лайк
+          await sql`
+            DELETE FROM novel_likes
+            WHERE novel_id = ${novelId} AND user_id = ${userId}
+          `;
+          
+          await sql`
+            UPDATE novels
+            SET likes_count = likes_count - 1
+            WHERE id = ${novelId}
+          `;
+        } else {
+          // Добавляем лайк
+          await sql`
+            INSERT INTO novel_likes (novel_id, user_id)
+            VALUES (${novelId}, ${userId})
+          `;
+          
+          await sql`
+            UPDATE novels
+            SET likes_count = likes_count + 1
+            WHERE id = ${novelId}
+          `;
         }
-        return respondJSON(rows[0]);
+
+        // Возвращаем обновленное количество лайков
+        const { rows: [novel] } = await sql`
+          SELECT likes_count FROM novels WHERE id = ${novelId}
+        `;
+
+        return respondJSON({ 
+          likes_count: novel.likes_count,
+          is_liked: !likes.length
+        });
       }
     }
+    // PUT запросы
+   if (request.method === 'PUT') {
+     // Обновление профиля переводчика
+     const translatorMatch = path.match(/^\/api\/translators\/(\d+)$/);
+     if (translatorMatch) {
+       const [, translatorId] = translatorMatch;
+       const data = await request.json();
+       
+       const { rows } = await sql`
+         UPDATE translators 
+         SET 
+           name = ${data.name},
+           description = ${data.description}
+         WHERE id = ${translatorId}
+         RETURNING *;
+       `;
+       if (rows.length === 0) {
+         return new Response('Not Found', { status: 404 });
+       }
+       return respondJSON(rows[0]);
+     }
 
-    return new Response('Not Found', { status: 404 });
-  } catch (error) {
-    return handleError(error);
-  }
+     // Редактирование главы
+     const chapterEditMatch = path.match(/^\/api\/novels\/(\d+)\/chapters\/(\d+)$/);
+     if (chapterEditMatch) {
+       const [, novelId, chapterId] = chapterEditMatch;
+       const data = await request.json();
+       
+       const { rows: [chapter] } = await sql`
+         UPDATE chapters
+         SET
+           title = ${data.title},
+           content = ${data.content}
+         WHERE id = ${chapterId} AND novel_id = ${novelId}
+         RETURNING *;
+       `;
+
+       if (!chapter) {
+         return new Response('Not Found', { status: 404 });
+       }
+
+       return respondJSON(chapter);
+     }
+   }
+
+   // DELETE запросы
+   if (request.method === 'DELETE') {
+     // Удаление комментария
+     const commentDeleteMatch = path.match(/^\/api\/comments\/(\d+)$/);
+     if (commentDeleteMatch) {
+       const [, commentId] = commentDeleteMatch;
+       const data = await request.json();
+
+       // Проверяем права на удаление
+       const { rows: [comment] } = await sql`
+         SELECT * FROM chapter_comments
+         WHERE id = ${commentId} AND user_id = ${data.userId}
+       `;
+
+       if (!comment) {
+         return new Response('Forbidden', { status: 403 });
+       }
+
+       await sql`
+         DELETE FROM chapter_comments
+         WHERE id = ${commentId}
+       `;
+
+       return new Response(null, { status: 204 });
+     }
+   }
+
+   return new Response('Not Found', { status: 404 });
+ } catch (error) {
+   return handleError(error);
+ }
 }
