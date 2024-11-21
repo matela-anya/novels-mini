@@ -146,7 +146,32 @@ export default async function handler(request) {
             t.*,
             COALESCE(ts.novels_count, 0) as novels_count,
             COALESCE(ts.pages_count, 0) as pages_count,
-            COALESCE(ts.likes_count, 0) as likes_count
+            COALESCE(ts.likes_count, 0) as likes_count,
+            COALESCE(
+              (
+                SELECT json_agg(
+                  json_build_object(
+                    'id', n.id,
+                    'title', n.title,
+                    'status', n.status,
+                    'chapters_count', (SELECT COUNT(*) FROM chapters WHERE novel_id = n.id),
+                    'tags', COALESCE(
+                      (
+                        SELECT json_agg(t.name)
+                        FROM novel_tags nt
+                        JOIN tags t ON t.id = nt.tag_id
+                        WHERE nt.novel_id = n.id
+                      ),
+                      '[]'::json
+                    )
+                  )
+                  ORDER BY n.created_at DESC
+                )
+                FROM novels n
+                WHERE n.translator_id = t.id
+              ),
+              '[]'::json
+            ) as novels
           FROM translators t
           LEFT JOIN translator_stats ts ON ts.translator_id = t.id
           WHERE t.id = ${translatorId};
@@ -155,6 +180,53 @@ export default async function handler(request) {
           return new Response('Not Found', { status: 404 });
         }
         return respondJSON(rows[0]);
+      }
+    }
+
+    // POST запросы
+    if (request.method === 'POST') {
+      // Создание новеллы
+      if (path === '/api/novels') {
+        const data = await request.json();
+        
+        // Создаем новеллу
+        const { rows: [novel] } = await sql`
+          INSERT INTO novels (
+            title,
+            description,
+            status,
+            translator_id
+          ) VALUES (
+            ${data.title},
+            ${data.description},
+            ${data.status},
+            ${data.translator_id}
+          )
+          RETURNING *;
+        `;
+
+        // Добавляем теги
+        if (data.tags?.length > 0) {
+          for (const tagName of data.tags) {
+            // Получаем или создаем тег
+            const { rows: [tag] } = await sql`
+              INSERT INTO tags (name)
+              VALUES (${tagName})
+              ON CONFLICT (name) DO UPDATE
+              SET name = EXCLUDED.name
+              RETURNING id;
+            `;
+
+            // Связываем тег с новеллой
+            await sql`
+              INSERT INTO novel_tags (novel_id, tag_id)
+              VALUES (${novel.id}, ${tag.id})
+              ON CONFLICT DO NOTHING;
+            `;
+          }
+        }
+
+        return respondJSON(novel);
       }
     }
 
