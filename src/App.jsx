@@ -8,6 +8,7 @@ import Novel from './pages/Novel';
 import Chapter from './pages/Chapter';
 import Translator from './pages/Translator';
 import TranslatorEdit from './pages/TranslatorEdit';
+import NovelCreate from './pages/NovelCreate';
 
 // Базовый компонент для отображения Loading/Error
 const LoadingOrError = ({ error, isLoading }) => {
@@ -51,6 +52,7 @@ const App = () => {
           color: '#2481cc',
         });
         
+        // Убираем экран загрузки
         setIsLoading(false);
       } catch (err) {
         console.error('Failed to initialize Telegram Web App:', err);
@@ -71,6 +73,7 @@ const App = () => {
       <div className="min-h-screen bg-gray-50">
         <Routes>
           <Route path="/" element={<Home />} />
+          <Route path="/novel/new" element={<NovelCreate />} />
           <Route path="/novel/:id" element={<Novel />} />
           <Route path="/novel/:id/chapter/:chapterId" element={<Chapter />} />
           <Route path="/translator/:id" element={<Translator />} />
