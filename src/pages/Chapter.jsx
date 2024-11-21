@@ -47,7 +47,7 @@ const Chapter = () => {
    };
 
    fetchChapter();
- }, [novelId, chapterId]);
+ }, [novelId, chapterId, chapter]);
 
  useEffect(() => {
    if (chapter?.next_chapter) {
@@ -64,6 +64,37 @@ const Chapter = () => {
 
    return () => hideMainButton();
  }, [chapter, novelId, navigate]);
+
+ // Сохранение позиции прокрутки
+ useEffect(() => {
+   const savedPosition = sessionStorage.getItem(`chapter-scroll-${chapterId}`);
+   if (savedPosition) {
+     window.scrollTo(0, parseInt(savedPosition));
+   }
+
+   const handleScroll = () => {
+     sessionStorage.setItem(`chapter-scroll-${chapterId}`, window.scrollY.toString());
+   };
+
+   window.addEventListener('scroll', handleScroll);
+   return () => window.removeEventListener('scroll', handleScroll);
+ }, [chapterId]);
+
+ // Навигация с клавиатуры
+ useEffect(() => {
+   const handleKeyPress = (e) => {
+     if (e.target.tagName === 'TEXTAREA') return;
+     
+     if (e.key === 'ArrowLeft' && chapter?.prev_chapter) {
+       navigate(`/novel/${novelId}/chapter/${chapter.prev_chapter}`);
+     } else if (e.key === 'ArrowRight' && chapter?.next_chapter) {
+       navigate(`/novel/${novelId}/chapter/${chapter.next_chapter}`);
+     }
+   };
+
+   window.addEventListener('keydown', handleKeyPress);
+   return () => window.removeEventListener('keydown', handleKeyPress);
+ }, [chapter, novelId, navigate, chapterId]);
 
  const changeFontSize = (delta) => {
    setFontSize(prev => {
@@ -200,36 +231,3 @@ const Chapter = () => {
 };
 
 export default Chapter;
-
-// Добавьте эти хуки под остальными useEffect:
-
-// Сохранение позиции прокрутки
-useEffect(() => {
-  const savedPosition = sessionStorage.getItem(`chapter-scroll-${chapterId}`);
-  if (savedPosition) {
-    window.scrollTo(0, parseInt(savedPosition));
-  }
-
-  const handleScroll = () => {
-    sessionStorage.setItem(`chapter-scroll-${chapterId}`, window.scrollY.toString());
-  };
-
-  window.addEventListener('scroll', handleScroll);
-  return () => window.removeEventListener('scroll', handleScroll);
-}, [chapterId]);
-
-// Навигация с клавиатуры
-useEffect(() => {
-  const handleKeyPress = (e) => {
-    if (e.target.tagName === 'TEXTAREA') return;
-    
-    if (e.key === 'ArrowLeft' && chapter?.prev_chapter) {
-      navigate(`/novel/${novelId}/chapter/${chapter.prev_chapter}`);
-    } else if (e.key === 'ArrowRight' && chapter?.next_chapter) {
-      navigate(`/novel/${novelId}/chapter/${chapter.next_chapter}`);
-    }
-  };
-
-  window.addEventListener('keydown', handleKeyPress);
-  return () => window.removeEventListener('keydown', handleKeyPress);
-}, [chapter, novelId, navigate]);
