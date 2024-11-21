@@ -43,21 +43,21 @@ const ChapterCreate = () => {
 
   // Управление главной кнопкой
   useEffect(() => {
-    const isFormValid = 
-      formData.title.trim().length > 0 && 
-      formData.content.trim().length > 0;
+  const isFormValid = 
+    formData.title.trim().length > 0 && 
+    formData.content.trim().length > 0;
 
-    if (isFormValid && !isLoading) {
-      showMainButton({
-        text: 'ОПУБЛИКОВАТЬ',
-        onClick: handleSubmit
-      });
-    } else {
-      hideMainButton();
-    }
+  if (isFormValid && !isLoading) {
+    showMainButton({
+      text: 'ОПУБЛИКОВАТЬ',
+      onClick: handleSubmit
+    });
+  } else {
+    hideMainButton();
+  }
 
-    return () => hideMainButton();
-  }, [formData, isLoading]);
+  return () => hideMainButton();
+}, [formData, isLoading, handleSubmit]);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -67,7 +67,7 @@ const ChapterCreate = () => {
     }));
   };
 
-  const handleSubmit = async () => {
+  const handleSubmit = useCallback(async () => {
     if (isLoading) return;
 
     try {
@@ -93,7 +93,7 @@ const ChapterCreate = () => {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [isLoading, novelId, formData, navigate]);
 
   return (
     <div className="min-h-screen bg-gray-50">
