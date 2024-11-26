@@ -16,18 +16,16 @@ const App = () => {
   const [error, setError] = useState(null);
   const [webApp, setWebApp] = useState(null);
 
+  const App = () => {
   useEffect(() => {
     const init = async () => {
       try {
         console.log('Starting Telegram WebApp initialization...');
         const tg = await initTelegramApp();
         console.log('Telegram WebApp initialized:', tg);
-        setWebApp(tg);
-        setIsLoading(false);
+        console.log('User data:', tg.initDataUnsafe?.user);
       } catch (err) {
         console.error('Failed to initialize Telegram Web App:', err);
-        setError(err.message);
-        setIsLoading(false);
       }
     };
 
