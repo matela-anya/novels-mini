@@ -15,18 +15,30 @@ export default async function handler(request) {
   try {
     console.log('Starting database initialization...');
 
-    // Удаляем таблицы по одной
+    // Удаляем таблицы по одной в правильном порядке (с учетом зависимостей)
     await sql`DROP TABLE IF EXISTS chapter_comments;`;
-    await sql`DROP TABLE IF EXISTS chapter_likes;`; // Добавили
+    await sql`DROP TABLE IF EXISTS chapter_likes;`;
     await sql`DROP TABLE IF EXISTS novel_likes;`;
     await sql`DROP TABLE IF EXISTS novel_tags;`;
     await sql`DROP TABLE IF EXISTS chapters;`;
     await sql`DROP TABLE IF EXISTS novels;`;
     await sql`DROP TABLE IF EXISTS tags;`;
+    await sql`DROP TABLE IF EXISTS users;`; // Добавили
     await sql`DROP TABLE IF EXISTS translators;`;
     console.log('Dropped existing tables');
 
     // Создаем таблицы по одной
+    // Users теперь первая, так как от нее зависят комментарии
+    await sql`
+      CREATE TABLE users (
+        id BIGINT PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        photo_url TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `;
+    console.log('Created users table');
+
     await sql`
       CREATE TABLE translators (
         id SERIAL PRIMARY KEY,
@@ -82,7 +94,7 @@ export default async function handler(request) {
     await sql`
       CREATE TABLE novel_likes (
         novel_id INTEGER REFERENCES novels(id),
-        user_id BIGINT NOT NULL,
+        user_id BIGINT REFERENCES users(id),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         PRIMARY KEY (novel_id, user_id)
       );
@@ -92,7 +104,7 @@ export default async function handler(request) {
     await sql`
       CREATE TABLE chapter_likes (
         chapter_id INTEGER REFERENCES chapters(id),
-        user_id BIGINT NOT NULL,
+        user_id BIGINT REFERENCES users(id),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         PRIMARY KEY (chapter_id, user_id)
       );
@@ -103,7 +115,7 @@ export default async function handler(request) {
       CREATE TABLE chapter_comments (
         id SERIAL PRIMARY KEY,
         chapter_id INTEGER REFERENCES chapters(id),
-        user_id BIGINT NOT NULL,
+        user_id BIGINT REFERENCES users(id),
         content TEXT NOT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
@@ -111,6 +123,13 @@ export default async function handler(request) {
     console.log('Created chapter_comments table');
 
     // Добавляем тестовые данные
+    // Сначала тестового пользователя
+    await sql`
+      INSERT INTO users (id, name, photo_url)
+      VALUES (12345, 'Test User', 'https://example.com/photo.jpg');
+    `;
+    console.log('Added test user');
+
     const translator = await sql`
       INSERT INTO translators (name, description)
       VALUES ('Test Translator', 'This is a test translator profile')
@@ -142,6 +161,17 @@ export default async function handler(request) {
         (${novel.rows[0].id}, 2, 'Chapter 2', 'This is the content of chapter 2');
     `;
     console.log('Added test chapters');
+
+    // Добавляем тестовый комментарий
+    await sql`
+      INSERT INTO chapter_comments (chapter_id, user_id, content)
+      VALUES (
+        1,
+        12345,
+        'This is a test comment'
+      );
+    `;
+    console.log('Added test comment');
 
     return new Response(JSON.stringify({
       success: true,
