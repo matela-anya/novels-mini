@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { hapticFeedback } from '../utils/telegram';
 
-const LikeButton = ({ novelId, initialLikes = 0, initialIsLiked = false, userId }) => {
+const LikeButton = ({ novelId, chapterId, initialLikes = 0, initialIsLiked = false, userId }) => {
   const [likes, setLikes] = useState(initialLikes);
   const [isLiked, setIsLiked] = useState(initialIsLiked);
   const [isLoading, setIsLoading] = useState(false);
@@ -13,7 +13,11 @@ const LikeButton = ({ novelId, initialLikes = 0, initialIsLiked = false, userId 
       setIsLoading(true);
       hapticFeedback.impactOccurred('light');
 
-      const response = await fetch(`/api/novels/${novelId}/like`, {
+      const endpoint = chapterId 
+        ? `/api/novels/${novelId}/chapters/${chapterId}/like`
+        : `/api/novels/${novelId}/like`;
+
+      const response = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId })
