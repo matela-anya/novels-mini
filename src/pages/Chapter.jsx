@@ -18,9 +18,13 @@ const Chapter = () => {
   });
   const [userData, setUserData] = useState(null);
 
-  // Получаем данные пользователя один раз при монтировании
+  console.log('Telegram WebApp:', window.Telegram?.WebApp);
+  console.log('InitData:', window.Telegram?.WebApp?.initDataUnsafe);
+  console.log('User:', window.Telegram?.WebApp?.initDataUnsafe?.user);
+
   useEffect(() => {
     const user = getUserData();
+    console.log('Got user data:', user);
     setUserData(user);
   }, []);
 
