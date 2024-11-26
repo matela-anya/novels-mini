@@ -30,147 +30,144 @@ export default async function handler(request) {
   try {
     const url = new URL(request.url);
     const path = url.pathname;
-
+    const { searchParams } = url;
+    
     // GET запросы
-if (request.method === 'GET') {
-  // Список новелл
-  if (path === '/api/novels') {
-    const { rows } = await sql`
-      SELECT 
-        n.id,
-        n.title,
-        n.description,
-        n.status,
-        t.name as translator_name,
-        n.likes_count,
-        COUNT(c.id) as total_chapters,
-        COALESCE(
-          (
-            SELECT json_agg(t.name)
-            FROM novel_tags nt
-            JOIN tags t ON t.id = nt.tag_id
-            WHERE nt.novel_id = n.id
-          ),
-          '[]'::json
-        ) as tags
-      FROM novels n
-      LEFT JOIN translators t ON t.id = n.translator_id
-      LEFT JOIN chapters c ON c.novel_id = n.id
-      GROUP BY n.id, t.name
-      ORDER BY n.created_at DESC;
-    `;
-    return respondJSON(rows);
-  }
+    if (request.method === 'GET') {
+      // Список новелл
+      if (path === '/api/novels') {
+        const { rows } = await sql`
+          SELECT 
+            n.id,
+            n.title,
+            n.description,
+            n.status,
+            t.name as translator_name,
+            n.likes_count,
+            COUNT(c.id) as total_chapters,
+            COALESCE(
+              (
+                SELECT json_agg(t.name)
+                FROM novel_tags nt
+                JOIN tags t ON t.id = nt.tag_id
+                WHERE nt.novel_id = n.id
+              ),
+              '[]'::json
+            ) as tags
+          FROM novels n
+          LEFT JOIN translators t ON t.id = n.translator_id
+          LEFT JOIN chapters c ON c.novel_id = n.id
+          GROUP BY n.id, t.name
+          ORDER BY n.created_at DESC;
+        `;
+        return respondJSON(rows);
+      }
 
       // Отдельная новелла
-const novelMatch = path.match(/^\/api\/novels\/(\d+)$/);
-if (novelMatch) {
-  const novelId = novelMatch[1];
-  const { rows } = await sql`
-    SELECT 
-      n.*,
-      t.name as translator_name,
-      COALESCE(
-        (
-          SELECT json_agg(t.name)
-          FROM novel_tags nt
-          JOIN tags t ON t.id = nt.tag_id
-          WHERE nt.novel_id = n.id
-        ),
-        '[]'::json
-      ) as tags,
-      COALESCE(
-        (
-          SELECT json_agg(
-            json_build_object(
-              'id', c.id,
-              'title', c.title,
-              'number', c.number
-            ) ORDER BY c.number
-          )
-          FROM chapters c
-          WHERE c.novel_id = n.id
-        ),
-        '[]'::json
-      ) as chapters
-    FROM novels n
-    LEFT JOIN translators t ON t.id = n.translator_id
-    WHERE n.id = ${novelId}
-    GROUP BY n.id, t.id, t.name;
-  `;
-  
-  if (rows.length === 0) {
-    return new Response('Not Found', { status: 404 });
-  }
+      const novelMatch = path.match(/^\/api\/novels\/(\d+)$/);
+      if (novelMatch) {
+        const novelId = novelMatch[1];
+        const userId = searchParams.get('userId');
 
-  // Проверяем лайк пользователя, если userId предоставлен
-  const { searchParams } = url;
-  const userId = searchParams.get('userId');
-  let userHasLiked = false;
+        const { rows } = await sql`
+          SELECT 
+            n.*,
+            t.name as translator_name,
+            COALESCE(
+              (
+                SELECT json_agg(t.name)
+                FROM novel_tags nt
+                JOIN tags t ON t.id = nt.tag_id
+                WHERE nt.novel_id = n.id
+              ),
+              '[]'::json
+            ) as tags,
+            COALESCE(
+              (
+                SELECT json_agg(
+                  json_build_object(
+                    'id', c.id,
+                    'title', c.title,
+                    'number', c.number
+                  ) ORDER BY c.number
+                )
+                FROM chapters c
+                WHERE c.novel_id = n.id
+              ),
+              '[]'::json
+            ) as chapters
+          FROM novels n
+          LEFT JOIN translators t ON t.id = n.translator_id
+          WHERE n.id = ${novelId}
+          GROUP BY n.id, t.id, t.name;
+        `;
 
-  if (userId) {
-    const { rows: [likeStatus] } = await sql`
-      SELECT EXISTS (
-        SELECT 1 FROM novel_likes
-        WHERE novel_id = ${novelId} AND user_id = ${userId}
-      ) as liked
-    `;
-    userHasLiked = likeStatus.liked;
-  }
+        if (rows.length === 0) {
+          return new Response('Not Found', { status: 404 });
+        }
 
-  return respondJSON({
-    ...rows[0],
-    user_has_liked: userHasLiked
-  });
-}
+        let userHasLiked = false;
+        if (userId) {
+          const { rows: [likeStatus] } = await sql`
+            SELECT EXISTS (
+              SELECT 1 FROM novel_likes
+              WHERE novel_id = ${novelId} AND user_id = ${userId}
+            ) as liked
+          `;
+          userHasLiked = likeStatus.liked;
+        }
+
+        return respondJSON({
+          ...rows[0],
+          user_has_liked: userHasLiked
+        });
+      }
 
       // Глава новеллы
-const chapterMatch = path.match(/^\/api\/novels\/(\d+)\/chapters\/(\d+)$/);
-if (chapterMatch) {
-  const [, novelId, chapterId] = chapterMatch;
-  const { rows } = await sql`
-    WITH chapter_info AS (
-      SELECT 
-        c.*,
-        LAG(id) OVER (ORDER BY number) as prev_chapter,
-        LEAD(id) OVER (ORDER BY number) as next_chapter
-      FROM chapters c 
-      WHERE novel_id = ${novelId}
-    )
-    SELECT 
-      ci.*,
-      n.title as novel_title,
-      t.name as translator_name
-    FROM chapter_info ci
-    JOIN novels n ON n.id = ${novelId}
-    LEFT JOIN translators t ON t.id = n.translator_id
-    WHERE ci.id = ${chapterId};
-  `;
+      const chapterMatch = path.match(/^\/api\/novels\/(\d+)\/chapters\/(\d+)$/);
+      if (chapterMatch) {
+        const [, novelId, chapterId] = chapterMatch;
+        const userId = searchParams.get('userId');
 
-  if (rows.length === 0) {
-    return new Response('Not Found', { status: 404 });
-  }
+        const { rows } = await sql`
+          WITH chapter_info AS (
+            SELECT 
+              c.*,
+              LAG(id) OVER (ORDER BY number) as prev_chapter,
+              LEAD(id) OVER (ORDER BY number) as next_chapter
+            FROM chapters c 
+            WHERE novel_id = ${novelId}
+          )
+          SELECT 
+            ci.*,
+            n.title as novel_title,
+            t.name as translator_name
+          FROM chapter_info ci
+          JOIN novels n ON n.id = ${novelId}
+          LEFT JOIN translators t ON t.id = n.translator_id
+          WHERE ci.id = ${chapterId};
+        `;
 
-  // Проверяем лайк пользователя, если userId предоставлен
-  const { searchParams } = url;
-  const userId = searchParams.get('userId');
-  let userHasLiked = false;
+        if (rows.length === 0) {
+          return new Response('Not Found', { status: 404 });
+        }
 
-  if (userId) {
-    const { rows: [likeStatus] } = await sql`
-      SELECT EXISTS (
-        SELECT 1 FROM chapter_likes
-        WHERE chapter_id = ${chapterId} AND user_id = ${userId}
-      ) as liked
-    `;
-    userHasLiked = likeStatus.liked;
-  }
+        let userHasLiked = false;
+        if (userId) {
+          const { rows: [likeStatus] } = await sql`
+            SELECT EXISTS (
+              SELECT 1 FROM chapter_likes
+              WHERE chapter_id = ${chapterId} AND user_id = ${userId}
+            ) as liked
+          `;
+          userHasLiked = likeStatus.liked;
+        }
 
-  return respondJSON({
-    ...rows[0],
-    user_has_liked: userHasLiked
-  });
-}
+        return respondJSON({
+          ...rows[0],
+          user_has_liked: userHasLiked
+        });
+      }
 
       // Комментарии к главе
       const commentsMatch = path.match(/^\/api\/novels\/(\d+)\/chapters\/(\d+)\/comments$/);
@@ -241,123 +238,98 @@ if (chapterMatch) {
           LEFT JOIN translator_stats ts ON ts.translator_id = t.id
           WHERE t.id = ${translatorId};
         `;
+
         if (rows.length === 0) {
           return new Response('Not Found', { status: 404 });
         }
         return respondJSON(rows[0]);
       }
     }
+
     // POST запросы
     if (request.method === 'POST') {
-      // Создание новеллы
-      if (path === '/api/novels') {
-        const data = await request.json();
-        
-        // Создаем новеллу
-        const { rows: [novel] } = await sql`
-          INSERT INTO novels (
-            title,
-            description,
-            status,
-            translator_id
-          ) VALUES (
-            ${data.title},
-            ${data.description},
-            ${data.status},
-            ${data.translator_id}
-          )
-          RETURNING *;
+      const data = await request.json();
+
+      // Лайк главы
+      const chapterLikeMatch = path.match(/^\/api\/novels\/(\d+)\/chapters\/(\d+)\/like$/);
+      if (chapterLikeMatch) {
+        const [, novelId, chapterId] = chapterLikeMatch;
+        const userId = data.userId;
+
+        // Проверяем существование пользователя
+        const { rows: userRows } = await sql`
+          SELECT id FROM users WHERE id = ${userId}
         `;
 
-        // Добавляем теги
-        if (data.tags?.length > 0) {
-          for (const tagName of data.tags) {
-            // Получаем или создаем тег
-            const { rows: [tag] } = await sql`
-              INSERT INTO tags (name)
-              VALUES (${tagName})
-              ON CONFLICT (name) DO UPDATE
-              SET name = EXCLUDED.name
-              RETURNING id;
-            `;
-
-            // Связываем тег с новеллой
-            await sql`
-              INSERT INTO novel_tags (novel_id, tag_id)
-              VALUES (${novel.id}, ${tag.id})
-              ON CONFLICT DO NOTHING;
-            `;
-          }
+        // Если пользователь не существует, создаем его
+        if (userRows.length === 0) {
+          await sql`
+            INSERT INTO users (id, name)
+            VALUES (${userId}, 'User ${userId}')
+          `;
         }
 
-        return respondJSON(novel);
-      }
+        // Проверяем существующий лайк
+        const { rows: likes } = await sql`
+          SELECT * FROM chapter_likes
+          WHERE chapter_id = ${chapterId} AND user_id = ${userId}
+        `;
 
-      // Создание главы
-      const chapterCreateMatch = path.match(/^\/api\/novels\/(\d+)\/chapters$/);
-      if (chapterCreateMatch) {
-        const [, novelId] = chapterCreateMatch;
-        const data = await request.json();
-        
+        if (likes.length > 0) {
+          // Убираем лайк
+          await sql`
+            DELETE FROM chapter_likes
+            WHERE chapter_id = ${chapterId} AND user_id = ${userId}
+          `;
+          
+          await sql`
+            UPDATE chapters
+            SET likes_count = likes_count - 1
+            WHERE id = ${chapterId}
+          `;
+        } else {
+          // Добавляем лайк
+          await sql`
+            INSERT INTO chapter_likes (chapter_id, user_id)
+            VALUES (${chapterId}, ${userId})
+          `;
+          
+          await sql`
+            UPDATE chapters
+            SET likes_count = likes_count + 1
+            WHERE id = ${chapterId}
+          `;
+        }
+
+        // Возвращаем обновленное количество лайков
         const { rows: [chapter] } = await sql`
-          INSERT INTO chapters (
-            novel_id,
-            number,
-            title,
-            content
-          ) VALUES (
-            ${novelId},
-            ${data.number},
-            ${data.title},
-            ${data.content}
-          )
-          RETURNING *;
+          SELECT likes_count FROM chapters WHERE id = ${chapterId}
         `;
 
-        return respondJSON(chapter);
+        return respondJSON({ 
+          likes_count: chapter.likes_count,
+          is_liked: !likes.length
+        });
       }
 
-      // Добавление комментария
-      const commentCreateMatch = path.match(/^\/api\/novels\/(\d+)\/chapters\/(\d+)\/comments$/);
-      if (commentCreateMatch) {
-        const [, novelId, chapterId] = commentCreateMatch;
-        const data = await request.json();
-
-        const { rows: [comment] } = await sql`
-          INSERT INTO chapter_comments (
-            chapter_id,
-            user_id,
-            content,
-            created_at
-          ) VALUES (
-            ${chapterId},
-            ${data.userId},
-            ${data.content},
-            CURRENT_TIMESTAMP
-          )
-          RETURNING *;
-        `;
-
-        // Получаем информацию о пользователе для ответа
-        const { rows: [commentWithUser] } = await sql`
-          SELECT 
-            c.*,
-            u.name as user_name,
-            u.photo_url as user_photo
-          FROM chapter_comments c
-          JOIN users u ON u.id = c.user_id
-          WHERE c.id = ${comment.id}
-        `;
-
-        return respondJSON(commentWithUser);
-      }
-
-      // Поставить/убрать лайк
-      const likeMatch = path.match(/^\/api\/novels\/(\d+)\/like$/);
-      if (likeMatch) {
-        const [, novelId] = likeMatch;
-        const data = await request.json();
+      // Лайк новеллы
+      const novelLikeMatch = path.match(/^\/api\/novels\/(\d+)\/like$/);
+      if (novelLikeMatch) {
+        const [, novelId] = novelLikeMatch;
         const userId = data.userId;
+
+        // Проверяем существование пользователя
+        const { rows: userRows } = await sql`
+          SELECT id FROM users WHERE id = ${userId}
+        `;
+
+        // Если пользователь не существует, создаем его
+        if (userRows.length === 0) {
+          await sql`
+            INSERT INTO users (id, name)
+            VALUES (${userId}, 'User ${userId}')
+          `;
+        }
 
         // Проверяем существующий лайк
         const { rows: likes } = await sql`
@@ -401,81 +373,94 @@ if (chapterMatch) {
           is_liked: !likes.length
         });
       }
+
+      // Добавление комментария
+      const commentCreateMatch = path.match(/^\/api\/novels\/(\d+)\/chapters\/(\d+)\/comments$/);
+      if (commentCreateMatch) {
+        const [, novelId, chapterId] = commentCreateMatch;
+        const { userId, content } = data;
+
+        // Проверяем существование пользователя
+        const { rows: userRows } = await sql`
+          SELECT id FROM users WHERE id = ${userId}
+        `;
+
+        // Если пользователь не существует, создаем его
+        if (userRows.length === 0) {
+          await sql`
+            INSERT INTO users (id, name)
+            VALUES (${userId}, 'User ${userId}')
+          `;
+        }
+
+        // Добавляем комментарий
+        const { rows: [comment] } = await sql`
+          INSERT INTO chapter_comments (
+            chapter_id,
+            user_id,
+            content
+          ) VALUES (
+            ${chapterId},
+            ${userId},
+            ${content}
+          )
+          RETURNING *;
+        `;
+
+        // Получаем информацию о пользователе
+        const { rows: [commentWithUser] } = await sql`
+          SELECT 
+            c.*,
+            u.name as user_name,
+            u.photo_url as user_photo
+          FROM chapter_comments c
+          JOIN users u ON u.id = c.user_id
+          WHERE c.id = ${comment.id}
+        `;
+
+        return respondJSON(commentWithUser);
+      }
+
+      // Другие POST запросы...
     }
+
     // PUT запросы
-   if (request.method === 'PUT') {
-     // Обновление профиля переводчика
-     const translatorMatch = path.match(/^\/api\/translators\/(\d+)$/);
-     if (translatorMatch) {
-       const [, translatorId] = translatorMatch;
-       const data = await request.json();
-       
-       const { rows } = await sql`
-         UPDATE translators 
-         SET 
-           name = ${data.name},
-           description = ${data.description}
-         WHERE id = ${translatorId}
-         RETURNING *;
-       `;
-       if (rows.length === 0) {
-         return new Response('Not Found', { status: 404 });
-       }
-       return respondJSON(rows[0]);
-     }
+    if (request.method === 'PUT') {
+      const data = await request.json();
+      
+      // PUT handlers...
+    }
 
-     // Редактирование главы
-     const chapterEditMatch = path.match(/^\/api\/novels\/(\d+)\/chapters\/(\d+)$/);
-     if (chapterEditMatch) {
-       const [, novelId, chapterId] = chapterEditMatch;
-       const data = await request.json();
-       
-       const { rows: [chapter] } = await sql`
-         UPDATE chapters
-         SET
-           title = ${data.title},
-           content = ${data.content}
-         WHERE id = ${chapterId} AND novel_id = ${novelId}
-         RETURNING *;
-       `;
+    // DELETE запросы
+    if (request.method === 'DELETE') {
+      const data = await request.json();
+      
+      // Удаление комментария
+      const commentDeleteMatch = path.match(/^\/api\/comments\/(\d+)$/);
+      if (commentDeleteMatch) {
+        const [, commentId] = commentDeleteMatch;
 
-       if (!chapter) {
-         return new Response('Not Found', { status: 404 });
-       }
+        // Проверяем права на удаление
+        const { rows: [comment] } = await sql`
+          SELECT * FROM chapter_comments
+          WHERE id = ${commentId} AND user_id = ${data.userId}
+        `;
 
-       return respondJSON(chapter);
-     }
-   }
+        if (!comment) {
+          return new Response('Forbidden', { status: 403 });
+        }
 
-   // DELETE запросы
-   if (request.method === 'DELETE') {
-     // Удаление комментария
-     const commentDeleteMatch = path.match(/^\/api\/comments\/(\d+)$/);
-     if (commentDeleteMatch) {
-       const [, commentId] = commentDeleteMatch;
-       const data = await request.json();
+        await sql`
+          DELETE FROM chapter_comments
+          WHERE id = ${commentId}
+        `;
 
-       // Проверяем права на удаление
-       const { rows: [comment] } = await sql`
-         SELECT * FROM chapter_comments
-         WHERE id = ${commentId} AND user_id = ${data.userId}
-       `;
+        return new Response(null, { status: 204 });
+      }
+    }
 
-       if (!comment) {
-         return new Response('Forbidden', { status: 403 });
-       }
-
-       await sql`
-         DELETE FROM chapter_comments
-         WHERE id = ${commentId}
-       `;
-
-       return new Response(null, { status: 204 });
-     }
-   }
-
-   return new Response('Not Found', { status: 404 });
- } catch (error) {
-   return handleError(error);
- }
+    return new Response('Not Found', { status: 404 });
+  } catch (error) {
+    return handleError(error);
+  }
 }
