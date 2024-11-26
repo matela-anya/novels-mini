@@ -58,7 +58,7 @@ export default async function handler(request) {
           LEFT JOIN translators t ON t.id = n.translator_id
           LEFT JOIN chapters c ON c.novel_id = n.id
           GROUP BY n.id, t.name
-          ORDER BY n.created_at DESC;
+          ORDER BY n.created_at DESC
         `;
         return respondJSON(rows);
       }
@@ -99,7 +99,7 @@ export default async function handler(request) {
           FROM novels n
           LEFT JOIN translators t ON t.id = n.translator_id
           WHERE n.id = ${novelId}
-          GROUP BY n.id, t.id, t.name;
+          GROUP BY n.id, t.id, t.name
         `;
 
         if (rows.length === 0) {
@@ -145,7 +145,7 @@ export default async function handler(request) {
           FROM chapter_info ci
           JOIN novels n ON n.id = ${novelId}
           LEFT JOIN translators t ON t.id = n.translator_id
-          WHERE ci.id = ${chapterId};
+          WHERE ci.id = ${chapterId}
         `;
 
         if (rows.length === 0) {
@@ -182,12 +182,11 @@ export default async function handler(request) {
           FROM chapter_comments c
           JOIN users u ON u.id = c.user_id
           WHERE c.chapter_id = ${chapterId}
-          ORDER BY c.created_at DESC;
+          ORDER BY c.created_at DESC
         `;
 
         return respondJSON(comments);
       }
-
       // Профиль переводчика
       const translatorMatch = path.match(/^\/api\/translators\/(\d+)$/);
       if (translatorMatch) {
@@ -245,72 +244,12 @@ export default async function handler(request) {
         return respondJSON(rows[0]);
       }
     }
+    // Профиль переводчика...
+      // (оставляем как есть)
 
     // POST запросы
     if (request.method === 'POST') {
       const data = await request.json();
-
-      // Лайк главы
-      const chapterLikeMatch = path.match(/^\/api\/novels\/(\d+)\/chapters\/(\d+)\/like$/);
-      if (chapterLikeMatch) {
-        const [, novelId, chapterId] = chapterLikeMatch;
-        const userId = data.userId;
-
-        // Проверяем существование пользователя
-        const { rows: userRows } = await sql`
-          SELECT id FROM users WHERE id = ${userId}
-        `;
-
-        // Если пользователь не существует, создаем его
-        if (userRows.length === 0) {
-          await sql`
-            INSERT INTO users (id, name)
-            VALUES (${userId}, 'User ${userId}')
-          `;
-        }
-
-        // Проверяем существующий лайк
-        const { rows: likes } = await sql`
-          SELECT * FROM chapter_likes
-          WHERE chapter_id = ${chapterId} AND user_id = ${userId}
-        `;
-
-        if (likes.length > 0) {
-          // Убираем лайк
-          await sql`
-            DELETE FROM chapter_likes
-            WHERE chapter_id = ${chapterId} AND user_id = ${userId}
-          `;
-          
-          await sql`
-            UPDATE chapters
-            SET likes_count = likes_count - 1
-            WHERE id = ${chapterId}
-          `;
-        } else {
-          // Добавляем лайк
-          await sql`
-            INSERT INTO chapter_likes (chapter_id, user_id)
-            VALUES (${chapterId}, ${userId})
-          `;
-          
-          await sql`
-            UPDATE chapters
-            SET likes_count = likes_count + 1
-            WHERE id = ${chapterId}
-          `;
-        }
-
-        // Возвращаем обновленное количество лайков
-        const { rows: [chapter] } = await sql`
-          SELECT likes_count FROM chapters WHERE id = ${chapterId}
-        `;
-
-        return respondJSON({ 
-          likes_count: chapter.likes_count,
-          is_liked: !likes.length
-        });
-      }
 
       // Лайк новеллы
       const novelLikeMatch = path.match(/^\/api\/novels\/(\d+)\/like$/);
@@ -321,27 +260,31 @@ export default async function handler(request) {
         // Проверяем существование пользователя
         const { rows: userRows } = await sql`
           SELECT id FROM users WHERE id = ${userId}
+          LIMIT 1
         `;
 
         // Если пользователь не существует, создаем его
         if (userRows.length === 0) {
           await sql`
             INSERT INTO users (id, name)
-            VALUES (${userId}, 'User ${userId}')
+            VALUES (${userId}, ${`User ${userId}`})
           `;
         }
 
         // Проверяем существующий лайк
         const { rows: likes } = await sql`
-          SELECT * FROM novel_likes
-          WHERE novel_id = ${novelId} AND user_id = ${userId}
+          SELECT * FROM novel_likes 
+          WHERE novel_id = ${novelId} 
+          AND user_id = ${userId}
+          LIMIT 1
         `;
 
         if (likes.length > 0) {
           // Убираем лайк
           await sql`
             DELETE FROM novel_likes
-            WHERE novel_id = ${novelId} AND user_id = ${userId}
+            WHERE novel_id = ${novelId} 
+            AND user_id = ${userId}
           `;
           
           await sql`
@@ -383,28 +326,22 @@ export default async function handler(request) {
         // Проверяем существование пользователя
         const { rows: userRows } = await sql`
           SELECT id FROM users WHERE id = ${userId}
+          LIMIT 1
         `;
 
         // Если пользователь не существует, создаем его
         if (userRows.length === 0) {
           await sql`
             INSERT INTO users (id, name)
-            VALUES (${userId}, 'User ${userId}')
+            VALUES (${userId}, ${`User ${userId}`})
           `;
         }
 
         // Добавляем комментарий
         const { rows: [comment] } = await sql`
-          INSERT INTO chapter_comments (
-            chapter_id,
-            user_id,
-            content
-          ) VALUES (
-            ${chapterId},
-            ${userId},
-            ${content}
-          )
-          RETURNING *;
+          INSERT INTO chapter_comments (chapter_id, user_id, content)
+          VALUES (${chapterId}, ${userId}, ${content})
+          RETURNING *
         `;
 
         // Получаем информацию о пользователе
@@ -421,20 +358,14 @@ export default async function handler(request) {
         return respondJSON(commentWithUser);
       }
 
-      // Другие POST запросы...
-    }
-
-    // PUT запросы
-    if (request.method === 'PUT') {
-      const data = await request.json();
-      
-      // PUT handlers...
+      // Остальные POST запросы...
+      // (оставляем как есть)
     }
 
     // DELETE запросы
     if (request.method === 'DELETE') {
       const data = await request.json();
-      
+
       // Удаление комментария
       const commentDeleteMatch = path.match(/^\/api\/comments\/(\d+)$/);
       if (commentDeleteMatch) {
@@ -443,7 +374,8 @@ export default async function handler(request) {
         // Проверяем права на удаление
         const { rows: [comment] } = await sql`
           SELECT * FROM chapter_comments
-          WHERE id = ${commentId} AND user_id = ${data.userId}
+          WHERE id = ${commentId} 
+          AND user_id = ${data.userId}
         `;
 
         if (!comment) {
