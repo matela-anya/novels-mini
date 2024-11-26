@@ -63,63 +63,66 @@ if (request.method === 'GET') {
   }
 
       // Отдельная новелла
-      const novelMatch = path.match(/^\/api\/novels\/(\d+)$/);
-      if (novelMatch) {
-        const [, novelId] = novelMatch[1];
-        const { rows } = await sql`
-          SELECT 
-            n.*,
-            COALESCE(
-              (
-                SELECT json_agg(t.name)
-                FROM novel_tags nt
-                JOIN tags t ON t.id = nt.tag_id
-                WHERE nt.novel_id = n.id
-              ),
-              '[]'::json
-            ) as tags,
-            COALESCE(
-              (
-                SELECT json_agg(
-                  json_build_object(
-                    'id', c.id,
-                    'title', c.title,
-                    'number', c.number
-                  ) ORDER BY c.number
-                )
-                FROM chapters c
-                WHERE c.novel_id = n.id
-              ),
-              '[]'::json
-            ) as chapters
-          FROM novels n
-          WHERE n.id = ${novelId}
-          GROUP BY n.id;
-        `;
-        if (rows.length === 0) {
-          return new Response('Not Found', { status: 404 });
-        }
+const novelMatch = path.match(/^\/api\/novels\/(\d+)$/);
+if (novelMatch) {
+  const novelId = novelMatch[1];
+  const { rows } = await sql`
+    SELECT 
+      n.*,
+      t.name as translator_name,
+      COALESCE(
+        (
+          SELECT json_agg(t.name)
+          FROM novel_tags nt
+          JOIN tags t ON t.id = nt.tag_id
+          WHERE nt.novel_id = n.id
+        ),
+        '[]'::json
+      ) as tags,
+      COALESCE(
+        (
+          SELECT json_agg(
+            json_build_object(
+              'id', c.id,
+              'title', c.title,
+              'number', c.number
+            ) ORDER BY c.number
+          )
+          FROM chapters c
+          WHERE c.novel_id = n.id
+        ),
+        '[]'::json
+      ) as chapters
+    FROM novels n
+    LEFT JOIN translators t ON t.id = n.translator_id
+    WHERE n.id = ${novelId}
+    GROUP BY n.id, t.id, t.name;
+  `;
+  
+  if (rows.length === 0) {
+    return new Response('Not Found', { status: 404 });
+  }
 
-        // Проверяем лайк пользователя, если userId предоставлен
-        const { searchParams } = url;
-        const userId = searchParams.get('userId');
-        let userHasLiked = false;
+  // Проверяем лайк пользователя, если userId предоставлен
+  const { searchParams } = url;
+  const userId = searchParams.get('userId');
+  let userHasLiked = false;
 
-        if (userId) {
-          const { rows: [likeStatus] } = await sql`
-            SELECT EXISTS (
-              SELECT 1 FROM novel_likes
-              WHERE novel_id = ${novelId} AND user_id = ${userId}
-            ) as liked
-          `;
-          userHasLiked = likeStatus.liked;
-        }
+  if (userId) {
+    const { rows: [likeStatus] } = await sql`
+      SELECT EXISTS (
+        SELECT 1 FROM novel_likes
+        WHERE novel_id = ${novelId} AND user_id = ${userId}
+      ) as liked
+    `;
+    userHasLiked = likeStatus.liked;
+  }
 
-        return respondJSON({
-          ...rows[0],
-          user_has_liked: userHasLiked
-        });
-      }
+  return respondJSON({
+    ...rows[0],
+    user_has_liked: userHasLiked
+  });
+}
 
       // Глава новеллы
       const chapterMatch = path.match(/^\/api\/novels\/(\d+)\/chapters\/(\d+)$/);
