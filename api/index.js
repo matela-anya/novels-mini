@@ -125,31 +125,52 @@ if (novelMatch) {
 }
 
       // Глава новеллы
-      const chapterMatch = path.match(/^\/api\/novels\/(\d+)\/chapters\/(\d+)$/);
-      if (chapterMatch) {
-        const [, novelId, chapterId] = chapterMatch;
-        const { rows } = await sql`
-          WITH chapter_info AS (
-            SELECT 
-              c.*,
-              LAG(id) OVER (ORDER BY number) as prev_chapter,
-              LEAD(id) OVER (ORDER BY number) as next_chapter
-            FROM chapters c 
-            WHERE novel_id = ${novelId}
-          )
-          SELECT 
-            ci.*,
-            n.title as novel_title,
-            n.translator
-          FROM chapter_info ci
-          JOIN novels n ON n.id = ${novelId}
-          WHERE ci.id = ${chapterId};
-        `;
-        if (rows.length === 0) {
-          return new Response('Not Found', { status: 404 });
-        }
-        return respondJSON(rows[0]);
-      }
+const chapterMatch = path.match(/^\/api\/novels\/(\d+)\/chapters\/(\d+)$/);
+if (chapterMatch) {
+  const [, novelId, chapterId] = chapterMatch;
+  const { rows } = await sql`
+    WITH chapter_info AS (
+      SELECT 
+        c.*,
+        LAG(id) OVER (ORDER BY number) as prev_chapter,
+        LEAD(id) OVER (ORDER BY number) as next_chapter
+      FROM chapters c 
+      WHERE novel_id = ${novelId}
+    )
+    SELECT 
+      ci.*,
+      n.title as novel_title,
+      t.name as translator_name
+    FROM chapter_info ci
+    JOIN novels n ON n.id = ${novelId}
+    LEFT JOIN translators t ON t.id = n.translator_id
+    WHERE ci.id = ${chapterId};
+  `;
+
+  if (rows.length === 0) {
+    return new Response('Not Found', { status: 404 });
+  }
+
+  // Проверяем лайк пользователя, если userId предоставлен
+  const { searchParams } = url;
+  const userId = searchParams.get('userId');
+  let userHasLiked = false;
+
+  if (userId) {
+    const { rows: [likeStatus] } = await sql`
+      SELECT EXISTS (
+        SELECT 1 FROM chapter_likes
+        WHERE chapter_id = ${chapterId} AND user_id = ${userId}
+      ) as liked
+    `;
+    userHasLiked = likeStatus.liked;
+  }
+
+  return respondJSON({
+    ...rows[0],
+    user_has_liked: userHasLiked
+  });
+}
 
       // Комментарии к главе
       const commentsMatch = path.match(/^\/api\/novels\/(\d+)\/chapters\/(\d+)\/comments$/);
