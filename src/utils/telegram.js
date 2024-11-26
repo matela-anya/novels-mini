@@ -1,25 +1,71 @@
+// Проверка, запущено ли приложение в Telegram WebApp
+const isTelegramWebView = () => {
+  try {
+    return window.Telegram && window.Telegram.WebApp;
+  } catch {
+    return false;
+  }
+};
+
 // Инициализация Telegram WebApp
 export const initTelegramApp = () => {
   return new Promise((resolve, reject) => {
     try {
       // Проверяем, был ли уже загружен скрипт
       if (window.Telegram?.WebApp) {
+        console.log('Telegram WebApp already initialized');
         const tg = window.Telegram.WebApp;
         tg.ready();
         tg.expand();
+        
+        // Логируем информацию о пользователе и инициализации
+        console.log('WebApp Info:', {
+          user: tg.initDataUnsafe?.user,
+          version: tg.version,
+          platform: tg.platform,
+          colorScheme: tg.colorScheme,
+          themeParams: tg.themeParams,
+        });
+        
         resolve(tg);
         return;
       }
 
-      // Загружаем скрипт Telegram WebApp
+      console.log('Initializing Telegram WebApp...');
+
+      // Загружаем скрипт Telegram WebApp если он ещё не загружен
       const script = document.createElement('script');
       script.src = 'https://telegram.org/js/telegram-web-app.js';
       script.async = true;
 
       script.onload = () => {
+        // Проверяем успешность инициализации
+        if (!window.Telegram?.WebApp) {
+          reject(new Error('Telegram WebApp failed to initialize'));
+          return;
+        }
+
         const tg = window.Telegram.WebApp;
+
+        // Проверяем валидность initData
+        if (!tg.initDataUnsafe || !tg.initData) {
+          console.warn('WebApp initialization data is missing');
+        }
+
+        console.log('WebApp successfully initialized');
+
         tg.ready();
         tg.expand();
+
+        // Настраиваем основные параметры
+        tg.MainButton.setParams({
+          text_color: '#FFFFFF',
+          color: '#2481cc',
+        });
+
+        // Применяем тему
+        document.documentElement.setAttribute('data-theme', tg.colorScheme || 'light');
+
         resolve(tg);
       };
 
@@ -29,6 +75,7 @@ export const initTelegramApp = () => {
 
       document.head.appendChild(script);
     } catch (error) {
+      console.error('Error initializing Telegram WebApp:', error);
       reject(error);
     }
   });
@@ -37,6 +84,10 @@ export const initTelegramApp = () => {
 // Работа с CloudStorage
 export const saveToStorage = async (key, value) => {
   try {
+    if (!isTelegramWebView()) {
+      throw new Error('Not in Telegram WebApp environment');
+    }
+
     if (!window.Telegram?.WebApp?.CloudStorage) {
       throw new Error('CloudStorage is not available');
     }
@@ -54,6 +105,10 @@ export const saveToStorage = async (key, value) => {
 
 export const loadFromStorage = async (key) => {
   try {
+    if (!isTelegramWebView()) {
+      throw new Error('Not in Telegram WebApp environment');
+    }
+
     if (!window.Telegram?.WebApp?.CloudStorage) {
       throw new Error('CloudStorage is not available');
     }
@@ -74,10 +129,9 @@ export const loadFromStorage = async (key) => {
 
 // Вспомогательные функции для работы с UI элементами Telegram
 export const showMainButton = (params = {}) => {
-  const tg = window.Telegram?.WebApp;
-  if (!tg) return;
+  if (!isTelegramWebView()) return;
 
-  const mainButton = tg.MainButton;
+  const mainButton = window.Telegram.WebApp.MainButton;
   const { text, color, textColor, onClick } = params;
 
   if (text) mainButton.setText(text);
@@ -89,42 +143,38 @@ export const showMainButton = (params = {}) => {
 };
 
 export const hideMainButton = () => {
-  const tg = window.Telegram?.WebApp;
-  if (!tg) return;
-  
-  tg.MainButton.hide();
+  if (!isTelegramWebView()) return;
+  window.Telegram.WebApp.MainButton.hide();
 };
 
 export const showBackButton = (onClick) => {
-  const tg = window.Telegram?.WebApp;
-  if (!tg) return;
+  if (!isTelegramWebView()) return;
 
+  const backButton = window.Telegram.WebApp.BackButton;
   if (onClick) {
-    tg.BackButton.onClick(onClick);
+    backButton.onClick(onClick);
   }
-  tg.BackButton.show();
+  backButton.show();
 };
 
 export const hideBackButton = () => {
-  const tg = window.Telegram?.WebApp;
-  if (!tg) return;
-  
-  tg.BackButton.hide();
+  if (!isTelegramWebView()) return;
+  window.Telegram.WebApp.BackButton.hide();
 };
 
 // Работа с темой
 export const getCurrentTheme = () => {
-  const tg = window.Telegram?.WebApp;
-  if (!tg) return 'light';
-  
-  return tg.colorScheme || 'light';
+  if (!isTelegramWebView()) return 'light';
+  return window.Telegram.WebApp.colorScheme || 'light';
 };
 
 // Утилиты для безопасной области
 export const getSafeAreaInsets = () => {
-  const tg = window.Telegram?.WebApp;
-  if (!tg) return { top: 0, bottom: 0, left: 0, right: 0 };
+  if (!isTelegramWebView()) {
+    return { top: 0, bottom: 0, left: 0, right: 0 };
+  }
 
+  const tg = window.Telegram.WebApp;
   return {
     top: tg.safeAreaInset?.top || 0,
     bottom: tg.safeAreaInset?.bottom || 0,
@@ -135,44 +185,49 @@ export const getSafeAreaInsets = () => {
 
 // Работа с пользовательскими данными
 export const getUserData = () => {
-  const tg = window.Telegram?.WebApp;
-  if (!tg) return null;
+  if (!isTelegramWebView()) return null;
+
+  const tg = window.Telegram.WebApp;
+  const user = tg.initDataUnsafe?.user;
+
+  if (!user) {
+    console.warn('User data is not available');
+    return null;
+  }
 
   return {
-    id: tg.initDataUnsafe?.user?.id,
-    firstName: tg.initDataUnsafe?.user?.first_name,
-    lastName: tg.initDataUnsafe?.user?.last_name,
-    username: tg.initDataUnsafe?.user?.username,
-    languageCode: tg.initDataUnsafe?.user?.language_code
+    id: user.id,
+    firstName: user.first_name,
+    lastName: user.last_name,
+    username: user.username,
+    languageCode: user.language_code,
+    isPremium: user.is_premium
   };
 };
 
 // Haptic feedback
 export const hapticFeedback = {
   impactOccurred: (style = 'medium') => {
-    const tg = window.Telegram?.WebApp;
-    if (!tg?.HapticFeedback) return;
-    
-    tg.HapticFeedback.impactOccurred(style);
+    if (!isTelegramWebView() || !window.Telegram.WebApp.HapticFeedback) return;
+    window.Telegram.WebApp.HapticFeedback.impactOccurred(style);
   },
   notificationOccurred: (type = 'success') => {
-    const tg = window.Telegram?.WebApp;
-    if (!tg?.HapticFeedback) return;
-    
-    tg.HapticFeedback.notificationOccurred(type);
+    if (!isTelegramWebView() || !window.Telegram.WebApp.HapticFeedback) return;
+    window.Telegram.WebApp.HapticFeedback.notificationOccurred(type);
   },
   selectionChanged: () => {
-    const tg = window.Telegram?.WebApp;
-    if (!tg?.HapticFeedback) return;
-    
-    tg.HapticFeedback.selectionChanged();
+    if (!isTelegramWebView() || !window.Telegram.WebApp.HapticFeedback) return;
+    window.Telegram.WebApp.HapticFeedback.selectionChanged();
   }
 };
 
-// Утилиты для работы с версией WebApp
+// Утилиты для проверки версии
 export const isVersionAtLeast = (version) => {
-  const tg = window.Telegram?.WebApp;
-  if (!tg) return false;
-  
-  return tg.isVersionAtLeast(version);
+  if (!isTelegramWebView()) return false;
+  return window.Telegram.WebApp.isVersionAtLeast(version);
+};
+
+export const getWebAppVersion = () => {
+  if (!isTelegramWebView()) return null;
+  return window.Telegram.WebApp.version;
 };
