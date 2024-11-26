@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { initTelegramApp } from './utils/telegram';
+import InitDb from './pages/InitDb';
 
 // Pages
 import Home from './pages/Home';
@@ -54,13 +55,9 @@ const App = () => {
   return (
     <Router>
       <div className="min-h-screen bg-gray-50">
-        {isLoading && (
-          <div className="fixed top-0 left-0 right-0 bg-blue-500 text-white text-center py-2">
-            Загрузка...
-          </div>
-        )}
         <Routes>
           <Route path="/" element={<Home />} />
+          <Route path="/init-db" element={<InitDb />} /> {/* Добавьте эту строку */}
           <Route path="/novel/new" element={<NovelCreate />} />
           <Route path="/novel/:id" element={<Novel />} />
           <Route path="/novel/:id/chapter/:chapterId" element={<Chapter />} />
