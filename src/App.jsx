@@ -10,30 +10,6 @@ import Translator from './pages/Translator';
 import TranslatorEdit from './pages/TranslatorEdit';
 import NovelCreate from './pages/NovelCreate';
 
-// Базовый компонент для отображения Loading/Error
-const LoadingOrError = ({ error, isLoading }) => {
-  if (error) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-red-500 text-center">
-          <div className="text-lg font-bold mb-2">Error</div>
-          <div>{error}</div>
-        </div>
-      </div>
-    );
-  }
-
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-gray-500">Loading...</div>
-      </div>
-    );
-  }
-
-  return null;
-};
-
 const App = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -42,17 +18,10 @@ const App = () => {
   useEffect(() => {
     const init = async () => {
       try {
+        console.log('Starting Telegram WebApp initialization...');
         const tg = await initTelegramApp();
+        console.log('Telegram WebApp initialized:', tg);
         setWebApp(tg);
-        
-        // Настраиваем тему и цвета
-        const mainButton = tg.MainButton;
-        mainButton.setParams({
-          text_color: '#FFFFFF',
-          color: '#2481cc',
-        });
-        
-        // Убираем экран загрузки
         setIsLoading(false);
       } catch (err) {
         console.error('Failed to initialize Telegram Web App:', err);
@@ -64,13 +33,32 @@ const App = () => {
     init();
   }, []);
 
-  // Показываем экран загрузки или ошибки
-  const loadingOrError = <LoadingOrError error={error} isLoading={isLoading} />;
-  if (loadingOrError) return loadingOrError;
+  if (error) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4">
+        <div className="text-red-500 text-center">
+          <div className="text-lg font-bold mb-2">Ошибка инициализации</div>
+          <div>{error}</div>
+          <button 
+            onClick={() => window.location.reload()}
+            className="mt-4 px-4 py-2 bg-blue-500 text-white rounded"
+          >
+            Обновить
+          </button>
+        </div>
+      </div>
+    );
+  }
 
+  // Даже если isLoading=true, показываем основной контент
   return (
     <Router>
       <div className="min-h-screen bg-gray-50">
+        {isLoading && (
+          <div className="fixed top-0 left-0 right-0 bg-blue-500 text-white text-center py-2">
+            Загрузка...
+          </div>
+        )}
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/novel/new" element={<NovelCreate />} />
