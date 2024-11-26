@@ -35,12 +35,14 @@ const Comments = ({ novelId, chapterId, userId }) => {
 
   const fetchComments = async () => {
     try {
+      setError(null);
       const response = await fetch(`/api/novels/${novelId}/chapters/${chapterId}/comments`);
       if (!response.ok) throw new Error('Failed to fetch comments');
       const data = await response.json();
       setComments(data);
     } catch (err) {
-      setError(err.message);
+      console.error('Error fetching comments:', err);
+      setError('Не удалось загрузить комментарии');
     }
   };
 
@@ -54,6 +56,7 @@ const Comments = ({ novelId, chapterId, userId }) => {
 
     try {
       setIsLoading(true);
+      setError(null);
       hapticFeedback.impactOccurred('light');
 
       const response = await fetch(`/api/novels/${novelId}/chapters/${chapterId}/comments`, {
@@ -65,14 +68,18 @@ const Comments = ({ novelId, chapterId, userId }) => {
         })
       });
 
-      if (!response.ok) throw new Error('Failed to post comment');
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Failed to post comment');
+      }
 
       const comment = await response.json();
       setComments(prev => [comment, ...prev]);
       setNewComment('');
       hapticFeedback.notificationOccurred('success');
     } catch (err) {
-      setError(err.message);
+      console.error('Error posting comment:', err);
+      setError('Не удалось отправить комментарий');
       hapticFeedback.notificationOccurred('error');
     } finally {
       setIsLoading(false);
@@ -81,6 +88,7 @@ const Comments = ({ novelId, chapterId, userId }) => {
 
   const handleDelete = async (commentId) => {
     try {
+      setError(null);
       hapticFeedback.impactOccurred('light');
 
       const response = await fetch(`/api/comments/${commentId}`, {
@@ -94,7 +102,8 @@ const Comments = ({ novelId, chapterId, userId }) => {
       setComments(prev => prev.filter(c => c.id !== commentId));
       hapticFeedback.notificationOccurred('success');
     } catch (err) {
-      setError(err.message);
+      console.error('Error deleting comment:', err);
+      setError('Не удалось удалить комментарий');
       hapticFeedback.notificationOccurred('error');
     }
   };
@@ -102,7 +111,9 @@ const Comments = ({ novelId, chapterId, userId }) => {
   return (
     <div className="bg-white rounded-lg shadow-sm">
       <div className="p-4 bg-gray-50 border-b">
-        <h2 className="font-semibold">Комментарии ({comments.length})</h2>
+        <h2 className="font-semibold">
+          Комментарии ({comments.length})
+        </h2>
       </div>
 
       {/* Форма добавления */}
@@ -120,30 +131,29 @@ const Comments = ({ novelId, chapterId, userId }) => {
               min-h-[100px]
             "
           />
-          <div className="mt-2 flex justify-end">
-            <button
-              type="submit"
-              disabled={isLoading || !newComment.trim()}
-              className="
-                px-4 py-2 bg-blue-500 text-white rounded-lg
-                hover:bg-blue-600 disabled:opacity-50
-                transition-colors
-              "
-            >
-              {isLoading ? 'Отправка...' : 'Отправить'}
-            </button>
+          <div className="mt-2 flex flex-col space-y-2">
+            {error && (
+              <p className="text-red-500 text-sm">{error}</p>
+            )}
+            <div className="flex justify-end">
+              <button
+                type="submit"
+                disabled={isLoading || !newComment.trim()}
+                className="
+                  px-4 py-2 bg-blue-500 text-white rounded-lg
+                  hover:bg-blue-600 disabled:opacity-50
+                  transition-colors
+                "
+              >
+                {isLoading ? 'Отправка...' : 'Отправить'}
+              </button>
+            </div>
           </div>
         </form>
       )}
 
       {/* Список комментариев */}
       <div className="p-4">
-        {error && (
-          <div className="text-center text-red-500 mb-4">
-            {error}
-          </div>
-        )}
-
         {comments.length > 0 ? (
           <div className="divide-y">
             {comments.map(comment => (
