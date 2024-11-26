@@ -5,20 +5,40 @@ export const config = {
 };
 
 export default async function handler(request) {
-  try {
-    if (request.method !== 'POST') {
-      return new Response('Method not allowed', { status: 405 });
-    }
+  if (request.method !== 'POST') {
+    return new Response('Method not allowed', { 
+      status: 405,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
 
-    // Создаем таблицы
+  try {
+    console.log('Starting database initialization...');
+
+    // Создаем таблицы последовательно
     await sql`
-      CREATE TABLE IF NOT EXISTS translators (
+      DROP TABLE IF EXISTS chapter_comments CASCADE;
+      DROP TABLE IF EXISTS novel_likes CASCADE;
+      DROP TABLE IF EXISTS novel_tags CASCADE;
+      DROP TABLE IF EXISTS chapters CASCADE;
+      DROP TABLE IF EXISTS novels CASCADE;
+      DROP TABLE IF EXISTS tags CASCADE;
+      DROP TABLE IF EXISTS translators CASCADE;
+    `;
+
+    console.log('Dropped existing tables');
+
+    await sql`
+      CREATE TABLE translators (
         id SERIAL PRIMARY KEY,
         name VARCHAR(255) NOT NULL,
         description TEXT
       );
+    `;
+    console.log('Created translators table');
 
-      CREATE TABLE IF NOT EXISTS novels (
+    await sql`
+      CREATE TABLE novels (
         id SERIAL PRIMARY KEY,
         title VARCHAR(255) NOT NULL,
         description TEXT,
@@ -27,8 +47,11 @@ export default async function handler(request) {
         likes_count INTEGER DEFAULT 0,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
+    `;
+    console.log('Created novels table');
 
-      CREATE TABLE IF NOT EXISTS chapters (
+    await sql`
+      CREATE TABLE chapters (
         id SERIAL PRIMARY KEY,
         novel_id INTEGER REFERENCES novels(id),
         number INTEGER NOT NULL,
@@ -36,26 +59,38 @@ export default async function handler(request) {
         content TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
+    `;
+    console.log('Created chapters table');
 
-      CREATE TABLE IF NOT EXISTS tags (
+    await sql`
+      CREATE TABLE tags (
         id SERIAL PRIMARY KEY,
         name VARCHAR(100) UNIQUE NOT NULL
       );
+    `;
+    console.log('Created tags table');
 
-      CREATE TABLE IF NOT EXISTS novel_tags (
+    await sql`
+      CREATE TABLE novel_tags (
         novel_id INTEGER REFERENCES novels(id),
         tag_id INTEGER REFERENCES tags(id),
         PRIMARY KEY (novel_id, tag_id)
       );
+    `;
+    console.log('Created novel_tags table');
 
-      CREATE TABLE IF NOT EXISTS novel_likes (
+    await sql`
+      CREATE TABLE novel_likes (
         novel_id INTEGER REFERENCES novels(id),
         user_id BIGINT NOT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         PRIMARY KEY (novel_id, user_id)
       );
+    `;
+    console.log('Created novel_likes table');
 
-      CREATE TABLE IF NOT EXISTS chapter_comments (
+    await sql`
+      CREATE TABLE chapter_comments (
         id SERIAL PRIMARY KEY,
         chapter_id INTEGER REFERENCES chapters(id),
         user_id BIGINT NOT NULL,
@@ -63,44 +98,52 @@ export default async function handler(request) {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `;
+    console.log('Created chapter_comments table');
 
     // Добавляем тестовые данные
-    const { rows: [translator] } = await sql`
+    await sql`
       INSERT INTO translators (name, description)
       VALUES ('Test Translator', 'This is a test translator profile')
       RETURNING id;
     `;
+    console.log('Added test translator');
 
-    const { rows: [novel] } = await sql`
-      INSERT INTO novels (title, description, status, translator_id)
+    await sql`
+      INSERT INTO novels (title, description, status, translator_id, likes_count)
       VALUES (
         'Test Novel',
         'This is a test novel description',
         'в процессе',
-        ${translator.id}
+        1,
+        0
       )
       RETURNING id;
     `;
+    console.log('Added test novel');
 
     await sql`
       INSERT INTO chapters (novel_id, number, title, content)
       VALUES 
-        (${novel.id}, 1, 'Chapter 1', 'This is the content of chapter 1'),
-        (${novel.id}, 2, 'Chapter 2', 'This is the content of chapter 2');
+        (1, 1, 'Chapter 1', 'This is the content of chapter 1'),
+        (1, 2, 'Chapter 2', 'This is the content of chapter 2');
     `;
+    console.log('Added test chapters');
 
-    return new Response(
-      JSON.stringify({ message: 'Database initialized successfully' }),
-      { headers: { 'Content-Type': 'application/json' } }
-    );
+    return new Response(JSON.stringify({
+      success: true,
+      message: 'Database initialized successfully'
+    }), {
+      headers: { 'Content-Type': 'application/json' }
+    });
+
   } catch (error) {
     console.error('Error initializing database:', error);
-    return new Response(
-      JSON.stringify({ error: error.message }), 
-      { 
-        status: 500,
-        headers: { 'Content-Type': 'application/json' }
-      }
-    );
+    return new Response(JSON.stringify({
+      success: false,
+      error: error.message
+    }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' }
+    });
   }
 }
