@@ -183,26 +183,23 @@ export const getSafeAreaInsets = () => {
   };
 };
 
-// Работа с пользовательскими данными
+// utils/telegram.js
 export const getUserData = () => {
-  if (!isTelegramWebView()) return null;
-
-  const tg = window.Telegram.WebApp;
-  const user = tg.initDataUnsafe?.user;
-
-  if (!user) {
-    console.warn('User data is not available');
+  try {
+    // Получаем объект WebApp из Telegram
+    const telegram = window.Telegram.WebApp;
+    
+    // Если есть инициализированный WebApp и данные пользователя
+    if (telegram && telegram.initDataUnsafe && telegram.initDataUnsafe.user) {
+      return telegram.initDataUnsafe.user;
+    }
+    
+    console.warn('Telegram user data not available');
+    return null;
+  } catch (error) {
+    console.error('Error getting Telegram user data:', error);
     return null;
   }
-
-  return {
-    id: user.id,
-    firstName: user.first_name,
-    lastName: user.last_name,
-    username: user.username,
-    languageCode: user.language_code,
-    isPremium: user.is_premium
-  };
 };
 
 // Haptic feedback
