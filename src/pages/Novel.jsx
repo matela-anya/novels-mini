@@ -97,7 +97,7 @@ const Novel = () => {
         <div className="mb-6">
           <div className="flex items-center justify-between mb-4">
             <div className="text-sm text-gray-600">
-              Перевод: {novel.translator}
+              Перевод: {novel.translator_name}
             </div>
             <div className="text-sm">
               {novel.chapters?.length || 0} глав
