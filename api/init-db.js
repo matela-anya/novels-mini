@@ -17,6 +17,7 @@ export default async function handler(request) {
 
     // Удаляем таблицы по одной
     await sql`DROP TABLE IF EXISTS chapter_comments;`;
+    await sql`DROP TABLE IF EXISTS chapter_likes;`; // Добавили
     await sql`DROP TABLE IF EXISTS novel_likes;`;
     await sql`DROP TABLE IF EXISTS novel_tags;`;
     await sql`DROP TABLE IF EXISTS chapters;`;
@@ -55,7 +56,8 @@ export default async function handler(request) {
         number INTEGER NOT NULL,
         title VARCHAR(255) NOT NULL,
         content TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        likes_count INTEGER DEFAULT 0
       );
     `;
     console.log('Created chapters table');
@@ -86,6 +88,16 @@ export default async function handler(request) {
       );
     `;
     console.log('Created novel_likes table');
+
+    await sql`
+      CREATE TABLE chapter_likes (
+        chapter_id INTEGER REFERENCES chapters(id),
+        user_id BIGINT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (chapter_id, user_id)
+      );
+    `;
+    console.log('Created chapter_likes table');
 
     await sql`
       CREATE TABLE chapter_comments (
