@@ -32,32 +32,35 @@ export default async function handler(request) {
     const path = url.pathname;
 
     // GET запросы
-    if (request.method === 'GET') {
-      // Список новелл
-      if (path === '/api/novels') {
-        const { rows } = await sql`
-          SELECT 
-            n.id,
-            n.title,
-            n.translator,
-            n.status,
-            COUNT(c.id) as total_chapters,
-            COALESCE(
-              (
-                SELECT json_agg(t.name)
-                FROM novel_tags nt
-                JOIN tags t ON t.id = nt.tag_id
-                WHERE nt.novel_id = n.id
-              ),
-              '[]'::json
-            ) as tags
-          FROM novels n
-          LEFT JOIN chapters c ON c.novel_id = n.id
-          GROUP BY n.id
-          ORDER BY n.created_at DESC;
-        `;
-        return respondJSON(rows);
-      }
+if (request.method === 'GET') {
+  // Список новелл
+  if (path === '/api/novels') {
+    const { rows } = await sql`
+      SELECT 
+        n.id,
+        n.title,
+        n.description,
+        n.status,
+        t.name as translator_name,
+        n.likes_count,
+        COUNT(c.id) as total_chapters,
+        COALESCE(
+          (
+            SELECT json_agg(t.name)
+            FROM novel_tags nt
+            JOIN tags t ON t.id = nt.tag_id
+            WHERE nt.novel_id = n.id
+          ),
+          '[]'::json
+        ) as tags
+      FROM novels n
+      LEFT JOIN translators t ON t.id = n.translator_id
+      LEFT JOIN chapters c ON c.novel_id = n.id
+      GROUP BY n.id, t.name
+      ORDER BY n.created_at DESC;
+    `;
+    return respondJSON(rows);
+  }
 
       // Отдельная новелла
       const novelMatch = path.match(/^\/api\/novels\/(\d+)$/);
