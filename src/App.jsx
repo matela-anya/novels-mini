@@ -16,7 +16,6 @@ const App = () => {
   const [error, setError] = useState(null);
   const [webApp, setWebApp] = useState(null);
 
-  const App = () => {
   useEffect(() => {
     const init = async () => {
       try {
@@ -24,8 +23,12 @@ const App = () => {
         const tg = await initTelegramApp();
         console.log('Telegram WebApp initialized:', tg);
         console.log('User data:', tg.initDataUnsafe?.user);
+        setWebApp(tg);
+        setIsLoading(false);
       } catch (err) {
         console.error('Failed to initialize Telegram Web App:', err);
+        setError(err.message);
+        setIsLoading(false);
       }
     };
 
@@ -49,13 +52,12 @@ const App = () => {
     );
   }
 
-  // Даже если isLoading=true, показываем основной контент
   return (
     <Router>
       <div className="min-h-screen bg-gray-50">
         <Routes>
           <Route path="/" element={<Home />} />
-          <Route path="/init-db" element={<InitDb />} /> {/* Добавьте эту строку */}
+          <Route path="/init-db" element={<InitDb />} />
           <Route path="/novel/new" element={<NovelCreate />} />
           <Route path="/novel/:id" element={<Novel />} />
           <Route path="/novel/:id/chapter/:chapterId" element={<Chapter />} />
