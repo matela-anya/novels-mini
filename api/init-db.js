@@ -15,19 +15,17 @@ export default async function handler(request) {
   try {
     console.log('Starting database initialization...');
 
-    // Создаем таблицы последовательно
-    await sql`
-      DROP TABLE IF EXISTS chapter_comments CASCADE;
-      DROP TABLE IF EXISTS novel_likes CASCADE;
-      DROP TABLE IF EXISTS novel_tags CASCADE;
-      DROP TABLE IF EXISTS chapters CASCADE;
-      DROP TABLE IF EXISTS novels CASCADE;
-      DROP TABLE IF EXISTS tags CASCADE;
-      DROP TABLE IF EXISTS translators CASCADE;
-    `;
-
+    // Удаляем таблицы по одной
+    await sql`DROP TABLE IF EXISTS chapter_comments;`;
+    await sql`DROP TABLE IF EXISTS novel_likes;`;
+    await sql`DROP TABLE IF EXISTS novel_tags;`;
+    await sql`DROP TABLE IF EXISTS chapters;`;
+    await sql`DROP TABLE IF EXISTS novels;`;
+    await sql`DROP TABLE IF EXISTS tags;`;
+    await sql`DROP TABLE IF EXISTS translators;`;
     console.log('Dropped existing tables');
 
+    // Создаем таблицы по одной
     await sql`
       CREATE TABLE translators (
         id SERIAL PRIMARY KEY,
@@ -101,21 +99,20 @@ export default async function handler(request) {
     console.log('Created chapter_comments table');
 
     // Добавляем тестовые данные
-    await sql`
+    const translator = await sql`
       INSERT INTO translators (name, description)
       VALUES ('Test Translator', 'This is a test translator profile')
       RETURNING id;
     `;
     console.log('Added test translator');
 
-    await sql`
-      INSERT INTO novels (title, description, status, translator_id, likes_count)
+    const novel = await sql`
+      INSERT INTO novels (title, description, status, translator_id)
       VALUES (
         'Test Novel',
         'This is a test novel description',
         'в процессе',
-        1,
-        0
+        ${translator.rows[0].id}
       )
       RETURNING id;
     `;
@@ -124,8 +121,13 @@ export default async function handler(request) {
     await sql`
       INSERT INTO chapters (novel_id, number, title, content)
       VALUES 
-        (1, 1, 'Chapter 1', 'This is the content of chapter 1'),
-        (1, 2, 'Chapter 2', 'This is the content of chapter 2');
+        (${novel.rows[0].id}, 1, 'Chapter 1', 'This is the content of chapter 1');
+    `;
+
+    await sql`
+      INSERT INTO chapters (novel_id, number, title, content)
+      VALUES 
+        (${novel.rows[0].id}, 2, 'Chapter 2', 'This is the content of chapter 2');
     `;
     console.log('Added test chapters');
 
