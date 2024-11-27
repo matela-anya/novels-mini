@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
 import Header from '../components/Header';
 import NovelCard from '../components/NovelCard';
 import { hapticFeedback, loadFromStorage } from '../utils/telegram';
@@ -107,14 +106,6 @@ const Home = () => {
            <NovelCard key={novel.id} novel={novel} />
          ))}
        </div>
-
-       <Link
-         to="/translator/new"
-         className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-gray-900 text-white px-6 py-3 rounded-full shadow-lg"
-         onClick={() => hapticFeedback.impactOccurred('medium')}
-       >
-         Стать переводчиком
-       </Link>
      </div>
    </div>
  );
