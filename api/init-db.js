@@ -23,7 +23,7 @@ export default async function handler(request) {
     await sql`DROP TABLE IF EXISTS chapters;`;
     await sql`DROP TABLE IF EXISTS novels;`;
     await sql`DROP TABLE IF EXISTS tags;`;
-    await sql`DROP TABLE IF EXISTS users;`; // Добавили
+    await sql`DROP TABLE IF EXISTS users;`; 
     await sql`DROP TABLE IF EXISTS translators;`;
     console.log('Dropped existing tables');
 
@@ -123,20 +123,25 @@ export default async function handler(request) {
     console.log('Created chapter_comments table');
 
     // Добавляем тестовые данные
-    // Сначала тестового пользователя
+    // Сначала тестового переводчика
+    const translator = await sql`
+      INSERT INTO translators (name, description)
+      VALUES (
+        'Саня', 
+        'Повседневность и университеты. А скоро будут и триллеры.'
+      )
+      RETURNING id;
+    `;
+    console.log('Added test translator');
+
+    // Тестового пользователя
     await sql`
       INSERT INTO users (id, name, photo_url)
       VALUES (12345, 'Test User', 'https://example.com/photo.jpg');
     `;
     console.log('Added test user');
 
-    const translator = await sql`
-      INSERT INTO translators (name, description)
-      VALUES ('Test Translator', 'This is a test translator profile')
-      RETURNING id;
-    `;
-    console.log('Added test translator');
-
+    // Тестовую новеллу
     const novel = await sql`
       INSERT INTO novels (title, description, status, translator_id)
       VALUES (
@@ -149,6 +154,7 @@ export default async function handler(request) {
     `;
     console.log('Added test novel');
 
+    // Тестовые главы
     await sql`
       INSERT INTO chapters (novel_id, number, title, content)
       VALUES 
