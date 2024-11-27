@@ -10,6 +10,7 @@ import Chapter from './pages/Chapter';
 import Translator from './pages/Translator';
 import TranslatorEdit from './pages/TranslatorEdit';
 import NovelCreate from './pages/NovelCreate';
+import TranslatorCreate from './pages/TranslatorCreate';
 
 const App = () => {
   const [isLoading, setIsLoading] = useState(true);
