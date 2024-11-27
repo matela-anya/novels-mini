@@ -122,6 +122,17 @@ export default async function handler(request) {
     `;
     console.log('Created chapter_comments table');
 
+    await sql`
+  CREATE TABLE translators (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    description TEXT,
+    photo_url TEXT,
+    user_id BIGINT UNIQUE REFERENCES users(id),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    `;
+
     // Добавляем тестовые данные
     // Сначала тестового переводчика
     const translator = await sql`
