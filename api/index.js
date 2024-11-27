@@ -181,24 +181,6 @@ export default async function handler(request) {
         });
       }
 
-      // Комментарии к главе
-      const commentsMatch = path.match(/^\/api\/novels\/(\d+)\/chapters\/(\d+)\/comments$/);
-      if (commentsMatch) {
-        const [, novelId, chapterId] = commentsMatch;
-        
-        const { rows: comments } = await sql`
-          SELECT 
-            c.*,
-            u.name as user_name,
-            u.photo_url as user_photo
-          FROM chapter_comments c
-          JOIN users u ON u.id = c.user_id
-          WHERE c.chapter_id = ${chapterId}
-          ORDER BY c.created_at DESC
-        `;
-
-        return respondJSON(comments);
-      }
       // Профиль переводчика
       const translatorMatch = path.match(/^\/api\/translators\/(\d+)$/);
       if (translatorMatch) {
@@ -247,7 +229,7 @@ export default async function handler(request) {
             ) as novels
           FROM translators t
           LEFT JOIN translator_stats ts ON ts.translator_id = t.id
-          WHERE t.id = ${translatorId};
+          WHERE t.id = ${translatorId}
         `;
 
         if (rows.length === 0) {
@@ -256,18 +238,12 @@ export default async function handler(request) {
         return respondJSON(rows[0]);
       }
     }
-    // Профиль переводчика...
-      // (оставляем как есть)
 
     // POST запросы
     if (request.method === 'POST') {
-      const data = await request.json();
-
-      // Лайк новеллы
-      const novelLikeMatch = path.match(/^\/api\/novels\/(\d+)\/like$/);
-      if (novelLikeMatch) {
-        const [, novelId] = novelLikeMatch;
-        const userId = data.userId;
+      // Создание переводчика
+      if (path === '/api/translators') {
+        const { userId, name, description, photoUrl } = await request.json();
 
         // Проверяем существование пользователя
         const { rows: userRows } = await sql`
@@ -279,9 +255,24 @@ export default async function handler(request) {
         if (userRows.length === 0) {
           await sql`
             INSERT INTO users (id, name)
-            VALUES (${userId}, ${`User ${userId}`})
+            VALUES (${userId}, ${name})
           `;
         }
+
+        const { rows: [translator] } = await sql`
+          INSERT INTO translators (name, description, photo_url, user_id)
+          VALUES (${name}, ${description}, ${photoUrl}, ${userId})
+          RETURNING *
+        `;
+
+        return respondJSON(translator);
+      }
+
+      // Лайк новеллы
+      const novelLikeMatch = path.match(/^\/api\/novels\/(\d+)\/like$/);
+      if (novelLikeMatch) {
+        const [, novelId] = novelLikeMatch;
+        const { userId } = await request.json();
 
         // Проверяем существующий лайк
         const { rows: likes } = await sql`
@@ -333,21 +324,7 @@ export default async function handler(request) {
       const commentCreateMatch = path.match(/^\/api\/novels\/(\d+)\/chapters\/(\d+)\/comments$/);
       if (commentCreateMatch) {
         const [, novelId, chapterId] = commentCreateMatch;
-        const { userId, content } = data;
-
-        // Проверяем существование пользователя
-        const { rows: userRows } = await sql`
-          SELECT id FROM users WHERE id = ${userId}
-          LIMIT 1
-        `;
-
-        // Если пользователь не существует, создаем его
-        if (userRows.length === 0) {
-          await sql`
-            INSERT INTO users (id, name)
-            VALUES (${userId}, ${`User ${userId}`})
-          `;
-        }
+        const { userId, content } = await request.json();
 
         // Добавляем комментарий
         const { rows: [comment] } = await sql`
@@ -369,9 +346,6 @@ export default async function handler(request) {
 
         return respondJSON(commentWithUser);
       }
-
-      // Остальные POST запросы...
-      // (оставляем как есть)
     }
 
     // DELETE запросы
