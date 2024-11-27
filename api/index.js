@@ -1,9 +1,5 @@
 import { sql } from '@vercel/postgres';
 
-export const config = {
-  runtime: 'edge',
-};
-
 // Вспомогательные функции
 const handleError = (error) => {
   console.error('API Error:', error);
