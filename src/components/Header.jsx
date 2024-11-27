@@ -53,27 +53,29 @@ const Header = ({ title, showBack = true, translatorId, translatorName }) => {
               </div>
             )}
             
-            <button 
-              className="p-2 rounded-full hover:bg-gray-100"
-              onClick={() => {
-                hapticFeedback.impactOccurred('light');
-                // Здесь можно добавить логику для меню
-              }}
-            >
-              <svg 
-                className="w-6 h-6 text-gray-600" 
-                fill="none" 
-                stroke="currentColor" 
-                viewBox="0 0 24 24"
+            {translatorId && (
+              <button 
+                className="p-2 rounded-full hover:bg-gray-100"
+                onClick={() => {
+                  hapticFeedback.impactOccurred('light');
+                  navigate(`/translator/${translatorId}`);
+                }}
               >
-                <path 
-                  strokeLinecap="round" 
-                  strokeLinejoin="round" 
-                  strokeWidth={2} 
-                  d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"
-                />
-              </svg>
-            </button>
+                <svg 
+                  className="w-6 h-6 text-gray-600" 
+                  fill="none" 
+                  stroke="currentColor" 
+                  viewBox="0 0 24 24"
+                >
+                  <path 
+                    strokeLinecap="round" 
+                    strokeLinejoin="round" 
+                    strokeWidth={2} 
+                    d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"
+                  />
+                </svg>
+              </button>
+            )}
           </div>
         </div>
       </header>
