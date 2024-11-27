@@ -63,6 +63,7 @@ const App = () => {
           <Route path="/novel/:id/chapter/:chapterId" element={<Chapter />} />
           <Route path="/translator/:id" element={<Translator />} />
           <Route path="/translator/:id/edit" element={<TranslatorEdit />} />
+          <Route path="/translator/create" element={<TranslatorCreate />} />
         </Routes>
       </div>
     </Router>
