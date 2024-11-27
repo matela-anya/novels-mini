@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import Header from '../components/Header';
 import NovelCard from '../components/NovelCard';
-import { hapticFeedback, loadFromStorage } from '../utils/telegram';
+import { hapticFeedback } from '../utils/telegram';
 
 const Home = () => {
   const [novels, setNovels] = useState([]);
@@ -12,23 +12,26 @@ const Home = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        setIsLoading(true);
         // Загружаем все новеллы
         const response = await fetch('/api/novels');
         if (!response.ok) throw new Error('Failed to fetch novels');
         const data = await response.json();
         setNovels(data);
 
-        // Получаем информацию о переводчике из первой новеллы
-        if (data.length > 0 && data[0].translator_id) {
-          const translatorResponse = await fetch(`/api/translators/${data[0].translator_id}`);
-          if (translatorResponse.ok) {
+        // Если есть хотя бы одна новелла, загружаем информацию о переводчике
+        if (data.length > 0) {
+          // Получаем translator_id из первой новеллы
+          const translatorId = data[0].translator_id;
+          if (translatorId) {
+            const translatorResponse = await fetch(`/api/translators/${translatorId}`);
+            if (!translatorResponse.ok) throw new Error('Failed to fetch translator');
             const translatorData = await translatorResponse.json();
+            console.log('Loaded translator data:', translatorData); // Для отладки
             setTranslator(translatorData);
           }
         }
       } catch (err) {
-        console.error('Error:', err);
+        console.error('Error loading data:', err);
         setError(err.message);
         hapticFeedback.notificationOccurred('error');
       } finally {
@@ -44,10 +47,10 @@ const Home = () => {
       <div className="min-h-screen bg-white">
         <Header 
           showBack={false} 
-          translatorId={translator?.id}
-          translatorName={translator?.name}
+          translatorId={null}
+          translatorName={null}
         />
-        <div className="text-center py-8">
+        <div className="container mx-auto px-4 py-8 text-center">
           <p className="text-red-500 mb-4">{error}</p>
           <button 
             onClick={() => window.location.reload()}
@@ -65,16 +68,19 @@ const Home = () => {
       <div className="min-h-screen bg-white">
         <Header 
           showBack={false}
-          translatorId={translator?.id}
-          translatorName={translator?.name}
+          translatorId={null}
+          translatorName={null}
         />
-        <div className="px-4 py-4 space-y-4">
-          {[...Array(3)].map((_, i) => (
-            <div 
-              key={i}
-              className="h-24 bg-gray-50 rounded-2xl animate-pulse"
-            />
-          ))}
+        <div className="container mx-auto px-4 py-4">
+          <div className="h-8 bg-gray-100 rounded w-1/3 mb-6" /> {/* Плейсхолдер для заголовка */}
+          <div className="space-y-4">
+            {[...Array(3)].map((_, i) => (
+              <div 
+                key={i}
+                className="h-24 bg-gray-50 rounded-lg animate-pulse"
+              />
+            ))}
+          </div>
         </div>
       </div>
     );
@@ -88,13 +94,25 @@ const Home = () => {
         translatorName={translator?.name}
       />
 
-      <div className="px-4">
-        <h2 className="text-2xl font-medium text-[#424242] mb-6">Все переводы</h2>
+      <div className="container mx-auto px-4 py-6">
+        <h2 className="text-2xl font-medium text-[#424242] mb-6">
+          Все переводы
+        </h2>
+        
         <div className="space-y-4">
           {novels.map(novel => (
-            <NovelCard key={novel.id} novel={novel} />
+            <NovelCard 
+              key={novel.id} 
+              novel={novel}
+            />
           ))}
         </div>
+
+        {novels.length === 0 && !isLoading && (
+          <div className="text-center text-gray-500 py-8">
+            Пока нет новелл
+          </div>
+        )}
       </div>
     </div>
   );
