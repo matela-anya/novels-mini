@@ -1,32 +1,9 @@
 import { sql } from '@vercel/postgres';
 
-// Вспомогательные функции
-const handleError = (error) => {
-  console.error('API Error:', error);
-  return new Response(
-    JSON.stringify({ 
-      error: 'Internal Server Error', 
-      details: error.message 
-    }), 
-    {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' },
-    }
-  );
-};
-
-const respondJSON = (data) => {
-  return new Response(
-    JSON.stringify(data),
-    { headers: { 'Content-Type': 'application/json' } }
-  );
-};
-
 export default async function handler(request) {
   try {
-    const url = new URL(request.url);
-    const path = url.pathname;
-    const { searchParams } = url;
+    const path = new URL(request.url, 'http://localhost').pathname;
+    const { searchParams } = new URL(request.url, 'http://localhost');
     
     // GET запросы
     if (request.method === 'GET') {
@@ -64,7 +41,9 @@ export default async function handler(request) {
           LEFT JOIN novel_tag_list ntl ON ntl.novel_id = n.id
           ORDER BY n.created_at DESC
         `;
-        return respondJSON(rows);
+        return new Response(JSON.stringify(rows), {
+          headers: { 'Content-Type': 'application/json' }
+        });
       }
 
       // Оптимизированная отдельная новелла
@@ -125,9 +104,11 @@ export default async function handler(request) {
           userHasLiked = likeStatus.liked;
         }
 
-        return respondJSON({
+        return new Response(JSON.stringify({
           ...rows[0],
           user_has_liked: userHasLiked
+        }), {
+          headers: { 'Content-Type': 'application/json' }
         });
       }
 
@@ -171,9 +152,11 @@ export default async function handler(request) {
           userHasLiked = likeStatus.liked;
         }
 
-        return respondJSON({
+        return new Response(JSON.stringify({
           ...rows[0],
           user_has_liked: userHasLiked
+        }), {
+          headers: { 'Content-Type': 'application/json' }
         });
       }
 
@@ -193,8 +176,11 @@ export default async function handler(request) {
           ORDER BY c.created_at DESC
         `;
 
-        return respondJSON(comments);
+        return new Response(JSON.stringify(comments), {
+          headers: { 'Content-Type': 'application/json' }
+        });
       }
+
       // Профиль переводчика
       const translatorMatch = path.match(/^\/api\/translators\/(\d+)$/);
       if (translatorMatch) {
@@ -249,7 +235,10 @@ export default async function handler(request) {
         if (rows.length === 0) {
           return new Response('Not Found', { status: 404 });
         }
-        return respondJSON(rows[0]);
+
+        return new Response(JSON.stringify(rows[0]), {
+          headers: { 'Content-Type': 'application/json' }
+        });
       }
     }
 
@@ -280,7 +269,9 @@ export default async function handler(request) {
           RETURNING *
         `;
 
-        return respondJSON(translator);
+        return new Response(JSON.stringify(translator), {
+          headers: { 'Content-Type': 'application/json' }
+        });
       }
 
       // Лайк новеллы
@@ -326,9 +317,11 @@ export default async function handler(request) {
           SELECT likes_count FROM novels WHERE id = ${novelId}
         `;
 
-        return respondJSON({ 
+        return new Response(JSON.stringify({ 
           likes_count: novel.likes_count,
           is_liked: !likes.length
+        }), {
+          headers: { 'Content-Type': 'application/json' }
         });
       }
 
@@ -370,7 +363,9 @@ export default async function handler(request) {
           WHERE c.id = ${comment.id}
         `;
 
-        return respondJSON(commentWithUser);
+        return new Response(JSON.stringify(commentWithUser), {
+          headers: { 'Content-Type': 'application/json' }
+        });
       }
     }
 
@@ -395,7 +390,9 @@ export default async function handler(request) {
           return new Response('Not Found', { status: 404 });
         }
 
-        return respondJSON(translator);
+        return new Response(JSON.stringify(translator), {
+          headers: { 'Content-Type': 'application/json' }
+        });
       }
     }
 
@@ -430,6 +427,13 @@ export default async function handler(request) {
 
     return new Response('Not Found', { status: 404 });
   } catch (error) {
-    return handleError(error);
+    console.error('API Error:', error);
+    return new Response(JSON.stringify({
+      error: 'Internal Server Error',
+      details: error.message
+    }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' }
+    });
   }
 }
