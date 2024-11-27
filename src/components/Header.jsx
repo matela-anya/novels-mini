@@ -26,7 +26,7 @@ const Header = ({ title, showBack = true, translatorId, translatorName }) => {
           {translatorId ? (
             <Link 
               to={`/translator/${translatorId}`}
-              className="flex items-center gap-4 mb-4"
+              className="flex items-center gap-4"
               onClick={() => hapticFeedback.impactOccurred('light')}
             >
               <div className="w-14 h-14 rounded-full overflow-hidden">
@@ -42,10 +42,8 @@ const Header = ({ title, showBack = true, translatorId, translatorName }) => {
               </div>
             </Link>
           ) : (
-            <div className="h-14 mb-4" /> // Placeholder если нет переводчика
+            <div className="h-14" /> // Placeholder если нет переводчика
           )}
-
-          <h1 className="text-2xl font-medium text-[#424242]">Все переводы</h1>
         </div>
       </header>
     );
