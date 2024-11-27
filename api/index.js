@@ -181,6 +181,24 @@ export default async function handler(request) {
         });
       }
 
+      // Комментарии к главе
+      const commentsMatch = path.match(/^\/api\/novels\/(\d+)\/chapters\/(\d+)\/comments$/);
+      if (commentsMatch) {
+        const [, novelId, chapterId] = commentsMatch;
+        
+        const { rows: comments } = await sql`
+          SELECT 
+            c.*,
+            u.name as user_name,
+            u.photo_url as user_photo
+          FROM chapter_comments c
+          JOIN users u ON u.id = c.user_id
+          WHERE c.chapter_id = ${chapterId}
+          ORDER BY c.created_at DESC
+        `;
+
+        return respondJSON(comments);
+      }
       // Профиль переводчика
       const translatorMatch = path.match(/^\/api\/translators\/(\d+)$/);
       if (translatorMatch) {
@@ -229,7 +247,7 @@ export default async function handler(request) {
             ) as novels
           FROM translators t
           LEFT JOIN translator_stats ts ON ts.translator_id = t.id
-          WHERE t.id = ${translatorId}
+          WHERE t.id = ${translatorId};
         `;
 
         if (rows.length === 0) {
@@ -259,6 +277,7 @@ export default async function handler(request) {
           `;
         }
 
+        // Создаем профиль переводчика
         const { rows: [translator] } = await sql`
           INSERT INTO translators (name, description, photo_url, user_id)
           VALUES (${name}, ${description}, ${photoUrl}, ${userId})
@@ -283,7 +302,6 @@ export default async function handler(request) {
         `;
 
         if (likes.length > 0) {
-          // Убираем лайк
           await sql`
             DELETE FROM novel_likes
             WHERE novel_id = ${novelId} 
@@ -296,7 +314,6 @@ export default async function handler(request) {
             WHERE id = ${novelId}
           `;
         } else {
-          // Добавляем лайк
           await sql`
             INSERT INTO novel_likes (novel_id, user_id)
             VALUES (${novelId}, ${userId})
@@ -309,7 +326,6 @@ export default async function handler(request) {
           `;
         }
 
-        // Возвращаем обновленное количество лайков
         const { rows: [novel] } = await sql`
           SELECT likes_count FROM novels WHERE id = ${novelId}
         `;
@@ -325,6 +341,20 @@ export default async function handler(request) {
       if (commentCreateMatch) {
         const [, novelId, chapterId] = commentCreateMatch;
         const { userId, content } = await request.json();
+
+        // Проверяем существование пользователя
+        const { rows: userRows } = await sql`
+          SELECT id FROM users WHERE id = ${userId}
+          LIMIT 1
+        `;
+
+        // Если пользователь не существует, создаем его
+        if (userRows.length === 0) {
+          await sql`
+            INSERT INTO users (id, name)
+            VALUES (${userId}, ${`User ${userId}`})
+          `;
+        }
 
         // Добавляем комментарий
         const { rows: [comment] } = await sql`
@@ -345,6 +375,31 @@ export default async function handler(request) {
         `;
 
         return respondJSON(commentWithUser);
+      }
+    }
+
+    // PUT запросы
+    if (request.method === 'PUT') {
+      // Обновление профиля переводчика
+      const translatorUpdateMatch = path.match(/^\/api\/translators\/(\d+)$/);
+      if (translatorUpdateMatch) {
+        const [, translatorId] = translatorUpdateMatch;
+        const { name, description } = await request.json();
+
+        const { rows: [translator] } = await sql`
+          UPDATE translators
+          SET 
+            name = ${name},
+            description = ${description}
+          WHERE id = ${translatorId}
+          RETURNING *
+        `;
+
+        if (!translator) {
+          return new Response('Not Found', { status: 404 });
+        }
+
+        return respondJSON(translator);
       }
     }
 
