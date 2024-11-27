@@ -43,7 +43,6 @@ const Home = () => {
     return (
       <div className="min-h-screen bg-white">
         <Header 
-          title={translator?.name} 
           showBack={false} 
           translatorId={translator?.id}
           translatorName={translator?.name}
@@ -65,7 +64,6 @@ const Home = () => {
     return (
       <div className="min-h-screen bg-white">
         <Header 
-          title={translator?.name}
           showBack={false}
           translatorId={translator?.id}
           translatorName={translator?.name}
@@ -85,7 +83,6 @@ const Home = () => {
   return (
     <div className="min-h-screen bg-white">
       <Header 
-        title={translator?.name}
         showBack={false}
         translatorId={translator?.id}
         translatorName={translator?.name}
