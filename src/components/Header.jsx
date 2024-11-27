@@ -61,8 +61,6 @@ const Header = ({ title, showBack = true, translatorId }) => {
             </button>
           </div>
 
-          <h1 className="text-2xl font-medium text-[#424242]">Все переводы</h1>
-
           {showMenu && translatorId && (
             <div className="absolute right-4 mt-2 w-48 bg-white rounded-lg shadow-lg py-1">
               <Link
