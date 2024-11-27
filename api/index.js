@@ -34,9 +34,24 @@ export default async function handler(request) {
     
     // GET запросы
     if (request.method === 'GET') {
-      // Список новелл
+      // Оптимизированный список новелл
       if (path === '/api/novels') {
         const { rows } = await sql`
+          WITH novel_stats AS (
+            SELECT 
+              novel_id,
+              COUNT(*) as total_chapters
+            FROM chapters
+            GROUP BY novel_id
+          ),
+          novel_tag_list AS (
+            SELECT 
+              novel_id,
+              json_agg(t.name) as tags
+            FROM novel_tags nt
+            JOIN tags t ON t.id = nt.tag_id
+            GROUP BY novel_id
+          )
           SELECT 
             n.id,
             n.title,
@@ -45,56 +60,52 @@ export default async function handler(request) {
             n.translator_id,
             t.name as translator_name,
             n.likes_count,
-            COUNT(c.id) as total_chapters,
-            COALESCE(
-              (
-                SELECT json_agg(t.name)
-                FROM novel_tags nt
-                JOIN tags t ON t.id = nt.tag_id
-                WHERE nt.novel_id = n.id
-              ),
-              '[]'::json
-            ) as tags
+            COALESCE(ns.total_chapters, 0) as total_chapters,
+            COALESCE(ntl.tags, '[]'::json) as tags
           FROM novels n
           LEFT JOIN translators t ON t.id = n.translator_id
-          LEFT JOIN chapters c ON c.novel_id = n.id
-          GROUP BY n.id, n.translator_id, t.name
+          LEFT JOIN novel_stats ns ON ns.novel_id = n.id
+          LEFT JOIN novel_tag_list ntl ON ntl.novel_id = n.id
           ORDER BY n.created_at DESC
         `;
         return respondJSON(rows);
       }
 
-      // Отдельная новелла
+      // Оптимизированная отдельная новелла
       const novelMatch = path.match(/^\/api\/novels\/(\d+)$/);
       if (novelMatch) {
         const novelId = novelMatch[1];
         const userId = searchParams.get('userId');
 
         const { rows } = await sql`
+          WITH novel_chapters AS (
+            SELECT 
+              id,
+              title,
+              number,
+              novel_id
+            FROM chapters
+            WHERE novel_id = ${novelId}
+            ORDER BY number
+          ),
+          novel_tag_list AS (
+            SELECT 
+              json_agg(t.name) as tags
+            FROM novel_tags nt
+            JOIN tags t ON t.id = nt.tag_id
+            WHERE novel_id = ${novelId}
+          )
           SELECT 
             n.*,
             t.name as translator_name,
+            COALESCE((SELECT tags FROM novel_tag_list), '[]'::json) as tags,
             COALESCE(
-              (
-                SELECT json_agg(t.name)
-                FROM novel_tags nt
-                JOIN tags t ON t.id = nt.tag_id
-                WHERE nt.novel_id = n.id
-              ),
-              '[]'::json
-            ) as tags,
-            COALESCE(
-              (
-                SELECT json_agg(
-                  json_build_object(
-                    'id', c.id,
-                    'title', c.title,
-                    'number', c.number
-                  ) ORDER BY c.number
-                )
-                FROM chapters c
-                WHERE c.novel_id = n.id
-              ),
+              (SELECT json_agg(json_build_object(
+                'id', c.id,
+                'title', c.title,
+                'number', c.number
+              ))
+              FROM novel_chapters c),
               '[]'::json
             ) as chapters
           FROM novels n
