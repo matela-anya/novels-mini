@@ -6,10 +6,10 @@ const NovelCard = ({ novel }) => {
   const {
     id,
     title,
-    translator,
+    translator_name,
     total_chapters = 0,
-    status = 'в процессе',
-    tags = []
+    current_chapter = 0,
+    status = 'в процессе'
   } = novel;
 
   return (
@@ -18,34 +18,30 @@ const NovelCard = ({ novel }) => {
       className="block bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow duration-200"
       onClick={() => hapticFeedback.impactOccurred('light')}
     >
-      <div className="p-4">
-        <div className="flex justify-between items-start mb-2">
-          <h2 className="text-lg font-semibold flex-1 mr-2">{title}</h2>
-          <div className="text-sm text-gray-500 whitespace-nowrap">
-            {total_chapters} глав
-          </div>
+      <div className="flex h-24 p-3 gap-3">
+        <div className="w-16 h-full bg-gray-100 rounded-md flex-shrink-0">
+          <img 
+            src="/api/placeholder/64/96"
+            alt={title}
+            className="w-full h-full object-cover rounded-md"
+          />
         </div>
         
-        <div className="text-sm text-gray-600 mb-2">
-          переводчик: {translator}
+        <div className="flex flex-col flex-1 min-w-0">
+          <h2 className="font-medium text-base line-clamp-2">{title}</h2>
+          
+          <div className="mt-auto">
+            <p className="text-sm text-gray-600">
+              перевод: {status}
+            </p>
+          </div>
         </div>
 
-        <div className="flex flex-wrap gap-1.5">
-          <span className={`
-            px-2 py-0.5 rounded text-xs
-            ${status === 'завершён' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}
-          `}>
-            {status}
-          </span>
-          
-          {tags.map(tag => (
-            <span 
-              key={tag}
-              className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-xs"
-            >
-              #{tag}
-            </span>
-          ))}
+        <div className="flex-shrink-0 text-sm text-blue-500">
+          {current_chapter > 0 
+            ? `прочитано ${current_chapter} из ${total_chapters}` 
+            : `глав: ${total_chapters}`
+          }
         </div>
       </div>
     </Link>
