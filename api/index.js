@@ -42,6 +42,7 @@ export default async function handler(request) {
             n.title,
             n.description,
             n.status,
+            n.translator_id,
             t.name as translator_name,
             n.likes_count,
             COUNT(c.id) as total_chapters,
@@ -57,7 +58,7 @@ export default async function handler(request) {
           FROM novels n
           LEFT JOIN translators t ON t.id = n.translator_id
           LEFT JOIN chapters c ON c.novel_id = n.id
-          GROUP BY n.id, t.name
+          GROUP BY n.id, n.translator_id, t.name
           ORDER BY n.created_at DESC
         `;
         return respondJSON(rows);
