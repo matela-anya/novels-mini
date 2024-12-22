@@ -4,36 +4,34 @@ export default async function handler(request) {
   try {
     const path = new URL(request.url, 'http://localhost').pathname;
     const { searchParams } = new URL(request.url, 'http://localhost');
+
+    // Базовый запрос для проверки подключения
+    const { rows: [healthCheck] } = await sql`SELECT 1 as connected;`;
+    if (!healthCheck?.connected) {
+      throw new Error('Database connection failed');
+    }
     
     // GET запросы
     if (request.method === 'GET') {
-      // Оптимизированный список новелл с пагинацией
+      // Оптимизированный список новелл - только необходимые данные
       if (path === '/api/novels') {
         const page = parseInt(searchParams.get('page')) || 1;
         const limit = parseInt(searchParams.get('limit')) || 10;
         const offset = (page - 1) * limit;
 
-        // Основной запрос для получения новелл
+        // Используем более простой запрос без лишних JOIN'ов
         const { rows: novels } = await sql`
           SELECT 
             n.id,
             n.title,
-            n.description,
             n.status,
             n.translator_id,
-            n.likes_count,
             t.name as translator_name,
             (
               SELECT COUNT(*)::int 
-              FROM chapters c 
-              WHERE c.novel_id = n.id
-            ) as total_chapters,
-            (
-              SELECT json_agg(tags.name)
-              FROM novel_tags nt
-              JOIN tags ON tags.id = nt.tag_id
-              WHERE nt.novel_id = n.id
-            ) as tags
+              FROM chapters 
+              WHERE novel_id = n.id
+            ) as total_chapters
           FROM novels n
           LEFT JOIN translators t ON t.id = n.translator_id
           ORDER BY n.created_at DESC
@@ -41,13 +39,30 @@ export default async function handler(request) {
           OFFSET ${offset}
         `;
 
-        // Получаем общее количество новелл для пагинации
+        // Загружаем общее количество для пагинации
         const { rows: [count] } = await sql`
           SELECT COUNT(*)::int as total FROM novels
         `;
 
+        // Для каждой новеллы загружаем теги отдельным запросом
+        const novelsWithTags = await Promise.all(
+          novels.map(async (novel) => {
+            const { rows: tags } = await sql`
+              SELECT name
+              FROM tags
+              JOIN novel_tags ON tags.id = novel_tags.tag_id
+              WHERE novel_tags.novel_id = ${novel.id}
+            `;
+            return {
+              ...novel,
+              tags: tags.map(t => t.name)
+            };
+          })
+        );
+
+        // Возвращаем результат с пагинацией
         return new Response(JSON.stringify({
-          novels,
+          novels: novelsWithTags,
           pagination: {
             total: count.total,
             page,
@@ -55,7 +70,10 @@ export default async function handler(request) {
             pages: Math.ceil(count.total / limit)
           }
         }), {
-          headers: { 'Content-Type': 'application/json' }
+          headers: { 
+            'Content-Type': 'application/json',
+            'Cache-Control': 'public, s-maxage=10'
+          }
         });
       }
 
@@ -92,7 +110,18 @@ export default async function handler(request) {
 
         if (!novel) {
           return new Response('Not Found', { status: 404 });
-        }
+
+  } catch (error) {
+    console.error('API Error:', error);
+    return new Response(JSON.stringify({
+      error: 'Internal Server Error',
+      details: error.message
+    }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
+}
 
         let userHasLiked = false;
         if (userId) {
