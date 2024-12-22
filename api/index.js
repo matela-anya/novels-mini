@@ -182,7 +182,6 @@ export default async function handler(request) {
           }
         });
       }
-
       // Получение комментариев к главе
       const commentsMatch = path.match(/^\/api\/novels\/(\d+)\/chapters\/(\d+)\/comments$/);
       if (commentsMatch) {
@@ -284,12 +283,260 @@ export default async function handler(request) {
       }
     }
 
-    // POST, PUT, DELETE запросы остаются без изменений
-    // ... [предыдущий код для POST, PUT, DELETE]
+    // POST запросы
+    if (request.method === 'POST') {
+      // Создание переводчика
+      if (path === '/api/translators') {
+        const { userId, name, description, photoUrl } = await request.json();
 
+        await sql`BEGIN`;
+        try {
+          // Создаем пользователя если не существует и сразу создаем переводчика
+          const { rows: [translator] } = await sql`
+            WITH user_data AS (
+              INSERT INTO users (id, name)
+              VALUES (${userId}, ${name})
+              ON CONFLICT (id) DO NOTHING
+              RETURNING id
+            )
+            INSERT INTO translators (name, description, photo_url, user_id)
+            SELECT ${name}, ${description}, ${photoUrl}, ${userId}
+            WHERE EXISTS (SELECT 1 FROM user_data)
+               OR EXISTS (SELECT 1 FROM users WHERE id = ${userId})
+            RETURNING *
+          `;
+
+          await sql`COMMIT`;
+
+          return new Response(JSON.stringify(translator), {
+            headers: { 
+              'Content-Type': 'application/json',
+              'Cache-Control': 'no-store'
+            }
+          });
+        } catch (error) {
+          await sql`ROLLBACK`;
+          throw error;
+        }
+      }
+
+      // Лайк новеллы
+      const novelLikeMatch = path.match(/^\/api\/novels\/(\d+)\/like$/);
+      if (novelLikeMatch) {
+        const [, novelId] = novelLikeMatch;
+        const { userId } = await request.json();
+
+        await sql`BEGIN`;
+        try {
+          // Используем CTE для атомарного обновления
+          const { rows: [updateResult] } = await sql`
+            WITH like_action AS (
+              INSERT INTO novel_likes (novel_id, user_id)
+              VALUES (${novelId}, ${userId})
+              ON CONFLICT (novel_id, user_id) DO DELETE
+              RETURNING novel_id, 
+                CASE WHEN xmax::text::int > 0 THEN -1 ELSE 1 END as action
+            )
+            UPDATE novels n
+            SET likes_count = likes_count + (
+              SELECT action FROM like_action
+            )
+            WHERE id = ${novelId}
+            RETURNING likes_count,
+              EXISTS (
+                SELECT 1 FROM novel_likes 
+                WHERE novel_id = n.id AND user_id = ${userId}
+              ) as is_liked
+          `;
+
+          await sql`COMMIT`;
+
+          return new Response(JSON.stringify(updateResult), {
+            headers: { 
+              'Content-Type': 'application/json',
+              'Cache-Control': 'no-store'
+            }
+          });
+        } catch (error) {
+          await sql`ROLLBACK`;
+          throw error;
+        }
+      }
+
+      // Лайк главы
+      const chapterLikeMatch = path.match(/^\/api\/novels\/(\d+)\/chapters\/(\d+)\/like$/);
+      if (chapterLikeMatch) {
+        const [, , chapterId] = chapterLikeMatch;
+        const { userId } = await request.json();
+
+        await sql`BEGIN`;
+        try {
+          const { rows: [updateResult] } = await sql`
+            WITH like_action AS (
+              INSERT INTO chapter_likes (chapter_id, user_id)
+              VALUES (${chapterId}, ${userId})
+              ON CONFLICT (chapter_id, user_id) DO DELETE
+              RETURNING chapter_id,
+                CASE WHEN xmax::text::int > 0 THEN -1 ELSE 1 END as action
+            )
+            UPDATE chapters c
+            SET likes_count = likes_count + (
+              SELECT action FROM like_action
+            )
+            WHERE id = ${chapterId}
+            RETURNING likes_count,
+              EXISTS (
+                SELECT 1 FROM chapter_likes 
+                WHERE chapter_id = c.id AND user_id = ${userId}
+              ) as is_liked
+          `;
+
+          await sql`COMMIT`;
+
+          return new Response(JSON.stringify(updateResult), {
+            headers: { 
+              'Content-Type': 'application/json',
+              'Cache-Control': 'no-store'
+            }
+          });
+        } catch (error) {
+          await sql`ROLLBACK`;
+          throw error;
+        }
+      }
+
+      // Добавление комментария
+      const commentCreateMatch = path.match(/^\/api\/novels\/(\d+)\/chapters\/(\d+)\/comments$/);
+      if (commentCreateMatch) {
+        const [, , chapterId] = commentCreateMatch;
+        const { userId, content } = await request.json();
+
+        await sql`BEGIN`;
+        try {
+          const { rows: [comment] } = await sql`
+            WITH user_data AS (
+              INSERT INTO users (id, name)
+              VALUES (${userId}, ${`User ${userId}`})
+              ON CONFLICT (id) DO NOTHING
+            ),
+            new_comment AS (
+              INSERT INTO chapter_comments (chapter_id, user_id, content)
+              VALUES (${chapterId}, ${userId}, ${content})
+              RETURNING *
+            )
+            SELECT 
+              nc.*,
+              u.name as user_name,
+              u.photo_url as user_photo
+            FROM new_comment nc
+            JOIN users u ON u.id = nc.user_id
+          `;
+
+          await sql`COMMIT`;
+
+          return new Response(JSON.stringify(comment), {
+            headers: { 
+              'Content-Type': 'application/json',
+              'Cache-Control': 'no-store'
+            }
+          });
+        } catch (error) {
+          await sql`ROLLBACK`;
+          throw error;
+        }
+      }
+    }
+
+    // PUT запросы
+    if (request.method === 'PUT') {
+      // Обновление профиля переводчика
+      const translatorUpdateMatch = path.match(/^\/api\/translators\/(\d+)$/);
+      if (translatorUpdateMatch) {
+        const [, translatorId] = translatorUpdateMatch;
+        const { name, description } = await request.json();
+
+        await sql`BEGIN`;
+        try {
+          const { rows: [translator] } = await sql`
+            UPDATE translators
+            SET 
+              name = ${name},
+              description = ${description},
+              updated_at = CURRENT_TIMESTAMP
+            WHERE id = ${translatorId}
+            RETURNING *
+          `;
+
+          if (!translator) {
+            await sql`ROLLBACK`;
+            return new Response('Not Found', { status: 404 });
+          }
+
+          await sql`COMMIT`;
+
+          return new Response(JSON.stringify(translator), {
+            headers: { 
+              'Content-Type': 'application/json',
+              'Cache-Control': 'no-store'
+            }
+          });
+        } catch (error) {
+          await sql`ROLLBACK`;
+          throw error;
+        }
+      }
+    }
+
+    // DELETE запросы
+    if (request.method === 'DELETE') {
+      // Удаление комментария
+      const commentDeleteMatch = path.match(/^\/api\/comments\/(\d+)$/);
+      if (commentDeleteMatch) {
+        const [, commentId] = commentDeleteMatch;
+        const { userId } = await request.json();
+
+        await sql`BEGIN`;
+        try {
+          const { rows: [comment] } = await sql`
+            DELETE FROM chapter_comments
+            WHERE id = ${commentId} AND user_id = ${userId}
+            RETURNING id
+          `;
+
+          if (!comment) {
+            await sql`ROLLBACK`;
+            return new Response('Forbidden', { status: 403 });
+          }
+
+          await sql`COMMIT`;
+
+          return new Response(null, { 
+            status: 204,
+            headers: {
+              'Cache-Control': 'no-store'
+            }
+          });
+        } catch (error) {
+          await sql`ROLLBACK`;
+          throw error;
+        }
+      }
+    }
+
+    // Если не найден подходящий маршрут
     return new Response('Not Found', { status: 404 });
-    
+
   } catch (error) {
+    if (error.code === '23505') { // Unique violation
+      return new Response(JSON.stringify({
+        error: 'Conflict',
+        details: 'Resource already exists'
+      }), {
+        status: 409,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
     console.error('API Error:', error);
     return new Response(JSON.stringify({
       error: 'Internal Server Error',
@@ -301,271 +548,3 @@ export default async function handler(request) {
     });
   }
 }
-
-// POST запросы
-if (request.method === 'POST') {
-  // Создание переводчика
-  if (path === '/api/translators') {
-    const { userId, name, description, photoUrl } = await request.json();
-
-    const { rows: [translator] } = await sql.begin(async (sql) => {
-      // Создаем пользователя если не существует и сразу создаем переводчика
-      const result = await sql`
-        WITH user_data AS (
-          INSERT INTO users (id, name)
-          VALUES (${userId}, ${name})
-          ON CONFLICT (id) DO NOTHING
-          RETURNING id
-        )
-        INSERT INTO translators (name, description, photo_url, user_id)
-        SELECT ${name}, ${description}, ${photoUrl}, ${userId}
-        WHERE EXISTS (SELECT 1 FROM user_data)
-           OR EXISTS (SELECT 1 FROM users WHERE id = ${userId})
-        RETURNING *
-      `;
-      
-      return result;
-    });
-
-    return new Response(JSON.stringify(translator), {
-      headers: { 
-        'Content-Type': 'application/json',
-        'Cache-Control': 'no-store'
-      }
-    });
-  }
-
-  // Создание новеллы
-  if (path === '/api/novels') {
-    const { title, description, status, translatorId, tags } = await request.json();
-
-    const { rows: [novel] } = await sql.begin(async (sql) => {
-      // Создаем новеллу и связываем с тегами в одной транзакции
-      const { rows: [newNovel] } = await sql`
-        INSERT INTO novels (title, description, status, translator_id)
-        VALUES (${title}, ${description}, ${status}, ${translatorId})
-        RETURNING *
-      `;
-
-      if (tags && tags.length > 0) {
-        // Получаем или создаем теги одним запросом
-        await sql`
-          WITH input_tags AS (
-            SELECT UNNEST(${sql.array(tags)}::text[]) as name
-          ),
-          inserted_tags AS (
-            INSERT INTO tags (name)
-            SELECT name FROM input_tags
-            ON CONFLICT (name) DO NOTHING
-            RETURNING id, name
-          ),
-          all_tags AS (
-            SELECT id, name FROM inserted_tags
-            UNION ALL
-            SELECT id, name FROM tags
-            WHERE name = ANY(${sql.array(tags)})
-          )
-          INSERT INTO novel_tags (novel_id, tag_id)
-          SELECT ${newNovel.id}, id FROM all_tags
-        `;
-      }
-
-      return sql`
-        SELECT 
-          n.*,
-          COALESCE(
-            (
-              SELECT json_agg(t.name)
-              FROM novel_tags nt
-              JOIN tags t ON t.id = nt.tag_id
-              WHERE nt.novel_id = n.id
-            ),
-            '[]'::json
-          ) as tags
-        FROM novels n
-        WHERE n.id = ${newNovel.id}
-      `;
-    });
-
-    return new Response(JSON.stringify(novel), {
-      headers: { 
-        'Content-Type': 'application/json',
-        'Cache-Control': 'no-store'
-      }
-    });
-  }
-
-  // Лайк новеллы
-  const novelLikeMatch = path.match(/^\/api\/novels\/(\d+)\/like$/);
-  if (novelLikeMatch) {
-    const [, novelId] = novelLikeMatch;
-    const { userId } = await request.json();
-
-    const result = await sql.begin(async (sql) => {
-      // Используем CTE для атомарного обновления
-      const { rows: [updateResult] } = await sql`
-        WITH like_action AS (
-          INSERT INTO novel_likes (novel_id, user_id)
-          VALUES (${novelId}, ${userId})
-          ON CONFLICT (novel_id, user_id) DO DELETE
-          RETURNING novel_id, 
-            CASE WHEN xmax::text::int > 0 THEN -1 ELSE 1 END as action
-        )
-        UPDATE novels n
-        SET likes_count = likes_count + (
-          SELECT action FROM like_action
-        )
-        WHERE id = ${novelId}
-        RETURNING likes_count,
-          EXISTS (
-            SELECT 1 FROM novel_likes 
-            WHERE novel_id = n.id AND user_id = ${userId}
-          ) as is_liked
-      `;
-
-      return updateResult;
-    });
-
-    return new Response(JSON.stringify(result), {
-      headers: { 
-        'Content-Type': 'application/json',
-        'Cache-Control': 'no-store'
-      }
-    });
-  }
-
-  // Лайк главы
-  const chapterLikeMatch = path.match(/^\/api\/novels\/(\d+)\/chapters\/(\d+)\/like$/);
-  if (chapterLikeMatch) {
-    const [, , chapterId] = chapterLikeMatch;
-    const { userId } = await request.json();
-
-    const result = await sql.begin(async (sql) => {
-      const { rows: [updateResult] } = await sql`
-        WITH like_action AS (
-          INSERT INTO chapter_likes (chapter_id, user_id)
-          VALUES (${chapterId}, ${userId})
-          ON CONFLICT (chapter_id, user_id) DO DELETE
-          RETURNING chapter_id,
-            CASE WHEN xmax::text::int > 0 THEN -1 ELSE 1 END as action
-        )
-        UPDATE chapters c
-        SET likes_count = likes_count + (
-          SELECT action FROM like_action
-        )
-        WHERE id = ${chapterId}
-        RETURNING likes_count,
-          EXISTS (
-            SELECT 1 FROM chapter_likes 
-            WHERE chapter_id = c.id AND user_id = ${userId}
-          ) as is_liked
-      `;
-
-      return updateResult;
-    });
-
-    return new Response(JSON.stringify(result), {
-      headers: { 
-        'Content-Type': 'application/json',
-        'Cache-Control': 'no-store'
-      }
-    });
-  }
-
-  // Добавление комментария
-  const commentCreateMatch = path.match(/^\/api\/novels\/(\d+)\/chapters\/(\d+)\/comments$/);
-  if (commentCreateMatch) {
-    const [, , chapterId] = commentCreateMatch;
-    const { userId, content } = await request.json();
-
-    const { rows: [comment] } = await sql.begin(async (sql) => {
-      // Создаем пользователя если не существует и сразу добавляем комментарий
-      return sql`
-        WITH user_data AS (
-          INSERT INTO users (id, name)
-          VALUES (${userId}, ${`User ${userId}`})
-          ON CONFLICT (id) DO NOTHING
-        ),
-        new_comment AS (
-          INSERT INTO chapter_comments (chapter_id, user_id, content)
-          VALUES (${chapterId}, ${userId}, ${content})
-          RETURNING *
-        )
-        SELECT 
-          nc.*,
-          u.name as user_name,
-          u.photo_url as user_photo
-        FROM new_comment nc
-        JOIN users u ON u.id = nc.user_id
-      `;
-    });
-
-    return new Response(JSON.stringify(comment), {
-      headers: { 
-        'Content-Type': 'application/json',
-        'Cache-Control': 'no-store'
-      }
-    });
-  }
-}
-
-// PUT запросы
-if (request.method === 'PUT') {
-  // Обновление профиля переводчика
-  const translatorUpdateMatch = path.match(/^\/api\/translators\/(\d+)$/);
-  if (translatorUpdateMatch) {
-    const [, translatorId] = translatorUpdateMatch;
-    const { name, description } = await request.json();
-
-    const { rows: [translator] } = await sql`
-      UPDATE translators
-      SET 
-        name = ${name},
-        description = ${description},
-        updated_at = CURRENT_TIMESTAMP
-      WHERE id = ${translatorId}
-      RETURNING *
-    `;
-
-    if (!translator) {
-      return new Response('Not Found', { status: 404 });
-    }
-
-    return new Response(JSON.stringify(translator), {
-      headers: { 
-        'Content-Type': 'application/json',
-        'Cache-Control': 'no-store'
-      }
-    });
-  }
-}
-
-// DELETE запросы
-if (request.method === 'DELETE') {
-  // Удаление комментария
-  const commentDeleteMatch = path.match(/^\/api\/comments\/(\d+)$/);
-  if (commentDeleteMatch) {
-    const [, commentId] = commentDeleteMatch;
-    const { userId } = await request.json();
-
-    const { rows: [comment] } = await sql`
-      DELETE FROM chapter_comments
-      WHERE id = ${commentId} AND user_id = ${userId}
-      RETURNING id
-    `;
-
-    if (!comment) {
-      return new Response('Forbidden', { status: 403 });
-    }
-
-    return new Response(null, { 
-      status: 204,
-      headers: {
-        'Cache-Control': 'no-store'
-      }
-    });
-  }
-}
-
-// Если не найден подходящий маршрут
-return new Response('Not Found', { status: 404 });
