@@ -2,14 +2,12 @@ import { sql } from '@vercel/postgres';
 
 const dropAllTables = async () => {
   // Таблицы нужно удалять в обратном порядке зависимостей
-  const tables = [
+  for (const table of [
     'chapter_comments', 'chapter_likes', 'novel_likes', 'novel_tags', 
     'chapters', 'novels', 'tags', 'translators', 'users'
-  ];
-
-  for (const table of tables) {
-    // Используем корректный синтаксис для sql tagged templates
-    await sql`DROP TABLE IF EXISTS ${sql(table)} CASCADE`;
+  ]) {
+    // Используем raw identifier для безопасной интерполяции имени таблицы
+    await sql.query(`DROP TABLE IF EXISTS "${table}" CASCADE`);
   }
 };
 
