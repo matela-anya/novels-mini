@@ -7,89 +7,90 @@ export default async function handler(request) {
     
     // GET запросы
     if (request.method === 'GET') {
-      // Оптимизированный список новелл
+      // Оптимизированный список новелл с пагинацией
       if (path === '/api/novels') {
-        const { rows } = await sql`
-          WITH novel_stats AS (
-            SELECT 
-              novel_id,
-              COUNT(*) as total_chapters
-            FROM chapters
-            GROUP BY novel_id
-          ),
-          novel_tag_list AS (
-            SELECT 
-              novel_id,
-              json_agg(t.name) as tags
-            FROM novel_tags nt
-            JOIN tags t ON t.id = nt.tag_id
-            GROUP BY novel_id
-          )
+        const page = parseInt(searchParams.get('page')) || 1;
+        const limit = parseInt(searchParams.get('limit')) || 10;
+        const offset = (page - 1) * limit;
+
+        // Основной запрос для получения новелл
+        const { rows: novels } = await sql`
           SELECT 
             n.id,
             n.title,
             n.description,
             n.status,
             n.translator_id,
-            t.name as translator_name,
             n.likes_count,
-            COALESCE(ns.total_chapters, 0) as total_chapters,
-            COALESCE(ntl.tags, '[]'::json) as tags
+            t.name as translator_name,
+            (
+              SELECT COUNT(*)::int 
+              FROM chapters c 
+              WHERE c.novel_id = n.id
+            ) as total_chapters,
+            (
+              SELECT json_agg(tags.name)
+              FROM novel_tags nt
+              JOIN tags ON tags.id = nt.tag_id
+              WHERE nt.novel_id = n.id
+            ) as tags
           FROM novels n
           LEFT JOIN translators t ON t.id = n.translator_id
-          LEFT JOIN novel_stats ns ON ns.novel_id = n.id
-          LEFT JOIN novel_tag_list ntl ON ntl.novel_id = n.id
           ORDER BY n.created_at DESC
+          LIMIT ${limit} 
+          OFFSET ${offset}
         `;
-        return new Response(JSON.stringify(rows), {
+
+        // Получаем общее количество новелл для пагинации
+        const { rows: [count] } = await sql`
+          SELECT COUNT(*)::int as total FROM novels
+        `;
+
+        return new Response(JSON.stringify({
+          novels,
+          pagination: {
+            total: count.total,
+            page,
+            limit,
+            pages: Math.ceil(count.total / limit)
+          }
+        }), {
           headers: { 'Content-Type': 'application/json' }
         });
       }
 
-      // Оптимизированная отдельная новелла
+      // Получение отдельной новеллы
       const novelMatch = path.match(/^\/api\/novels\/(\d+)$/);
       if (novelMatch) {
         const novelId = novelMatch[1];
         const userId = searchParams.get('userId');
 
-        const { rows } = await sql`
-          WITH novel_chapters AS (
-            SELECT 
-              id,
-              title,
-              number,
-              novel_id
-            FROM chapters
-            WHERE novel_id = ${novelId}
-            ORDER BY number
-          ),
-          novel_tag_list AS (
-            SELECT 
-              json_agg(t.name) as tags
-            FROM novel_tags nt
-            JOIN tags t ON t.id = nt.tag_id
-            WHERE novel_id = ${novelId}
-          )
+        const { rows: [novel] } = await sql`
           SELECT 
             n.*,
             t.name as translator_name,
-            COALESCE((SELECT tags FROM novel_tag_list), '[]'::json) as tags,
-            COALESCE(
-              (SELECT json_agg(json_build_object(
+            (
+              SELECT json_agg(tags.name)
+              FROM novel_tags nt
+              JOIN tags ON tags.id = nt.tag_id
+              WHERE nt.novel_id = n.id
+            ) as tags,
+            (
+              SELECT json_agg(json_build_object(
                 'id', c.id,
                 'title', c.title,
                 'number', c.number
               ))
-              FROM novel_chapters c),
-              '[]'::json
+              FROM chapters c
+              WHERE c.novel_id = n.id
+              ORDER BY c.number
             ) as chapters
           FROM novels n
           LEFT JOIN translators t ON t.id = n.translator_id
           WHERE n.id = ${novelId}
-          GROUP BY n.id, t.id, t.name
         `;
 
-        if (rows.length === 0) {
+        if (!novel) {
           return new Response('Not Found', { status: 404 });
         }
 
@@ -105,39 +106,40 @@ export default async function handler(request) {
         }
 
         return new Response(JSON.stringify({
-          ...rows[0],
+          ...novel,
           user_has_liked: userHasLiked
         }), {
           headers: { 'Content-Type': 'application/json' }
         });
       }
 
-      // Глава новеллы
+      // Получение главы
       const chapterMatch = path.match(/^\/api\/novels\/(\d+)\/chapters\/(\d+)$/);
       if (chapterMatch) {
         const [, novelId, chapterId] = chapterMatch;
         const userId = searchParams.get('userId');
 
-        const { rows } = await sql`
-          WITH chapter_info AS (
+        const { rows: [chapter] } = await sql`
+          WITH chapter_navigation AS (
             SELECT 
               c.*,
-              LAG(id) OVER (ORDER BY number) as prev_chapter,
-              LEAD(id) OVER (ORDER BY number) as next_chapter
+              LAG(id) OVER w as prev_chapter,
+              LEAD(id) OVER w as next_chapter
             FROM chapters c 
             WHERE novel_id = ${novelId}
+            WINDOW w AS (ORDER BY number)
           )
           SELECT 
-            ci.*,
+            cn.*,
             n.title as novel_title,
             t.name as translator_name
-          FROM chapter_info ci
+          FROM chapter_navigation cn
           JOIN novels n ON n.id = ${novelId}
           LEFT JOIN translators t ON t.id = n.translator_id
-          WHERE ci.id = ${chapterId}
+          WHERE cn.id = ${chapterId}
         `;
 
-        if (rows.length === 0) {
+        if (!chapter) {
           return new Response('Not Found', { status: 404 });
         }
 
@@ -153,17 +155,20 @@ export default async function handler(request) {
         }
 
         return new Response(JSON.stringify({
-          ...rows[0],
+          ...chapter,
           user_has_liked: userHasLiked
         }), {
           headers: { 'Content-Type': 'application/json' }
         });
       }
 
-      // Комментарии к главе
+      // Получение комментариев к главе
       const commentsMatch = path.match(/^\/api\/novels\/(\d+)\/chapters\/(\d+)\/comments$/);
       if (commentsMatch) {
         const [, novelId, chapterId] = commentsMatch;
+        const page = parseInt(searchParams.get('page')) || 1;
+        const limit = parseInt(searchParams.get('limit')) || 20;
+        const offset = (page - 1) * limit;
         
         const { rows: comments } = await sql`
           SELECT 
@@ -174,9 +179,26 @@ export default async function handler(request) {
           JOIN users u ON u.id = c.user_id
           WHERE c.chapter_id = ${chapterId}
           ORDER BY c.created_at DESC
+          LIMIT ${limit}
+          OFFSET ${offset}
         `;
 
-        return new Response(JSON.stringify(comments), {
+        // Получаем общее количество комментариев
+        const { rows: [count] } = await sql`
+          SELECT COUNT(*)::int as total 
+          FROM chapter_comments 
+          WHERE chapter_id = ${chapterId}
+        `;
+
+        return new Response(JSON.stringify({
+          comments,
+          pagination: {
+            total: count.total,
+            page,
+            limit,
+            pages: Math.ceil(count.total / limit)
+          }
+        }), {
           headers: { 'Content-Type': 'application/json' }
         });
       }
@@ -185,58 +207,58 @@ export default async function handler(request) {
       const translatorMatch = path.match(/^\/api\/translators\/(\d+)$/);
       if (translatorMatch) {
         const [, translatorId] = translatorMatch;
-        const { rows } = await sql`
-          WITH translator_stats AS (
-            SELECT 
-              translator_id,
-              COUNT(DISTINCT n.id) as novels_count,
-              COUNT(DISTINCT c.id) as pages_count,
-              SUM(n.likes_count) as likes_count
-            FROM novels n
-            LEFT JOIN chapters c ON c.novel_id = n.id
-            WHERE translator_id = ${translatorId}
-            GROUP BY translator_id
-          )
+        
+        const { rows: [translator] } = await sql`
           SELECT 
             t.*,
-            COALESCE(ts.novels_count, 0) as novels_count,
-            COALESCE(ts.pages_count, 0) as pages_count,
-            COALESCE(ts.likes_count, 0) as likes_count,
-            COALESCE(
-              (
-                SELECT json_agg(
-                  json_build_object(
-                    'id', n.id,
-                    'title', n.title,
-                    'status', n.status,
-                    'chapters_count', (SELECT COUNT(*) FROM chapters WHERE novel_id = n.id),
-                    'tags', COALESCE(
-                      (
-                        SELECT json_agg(t.name)
-                        FROM novel_tags nt
-                        JOIN tags t ON t.id = nt.tag_id
-                        WHERE nt.novel_id = n.id
-                      ),
-                      '[]'::json
-                    )
+            (
+              SELECT COUNT(*)::int 
+              FROM novels n 
+              WHERE n.translator_id = t.id
+            ) as novels_count,
+            (
+              SELECT COUNT(*)::int 
+              FROM chapters c
+              JOIN novels n ON n.id = c.novel_id
+              WHERE n.translator_id = t.id
+            ) as pages_count,
+            (
+              SELECT COALESCE(SUM(likes_count), 0)::int
+              FROM novels
+              WHERE translator_id = t.id
+            ) as likes_count,
+            (
+              SELECT json_agg(
+                json_build_object(
+                  'id', n.id,
+                  'title', n.title,
+                  'status', n.status,
+                  'chapters_count', (
+                    SELECT COUNT(*)::int 
+                    FROM chapters 
+                    WHERE novel_id = n.id
+                  ),
+                  'tags', (
+                    SELECT json_agg(t.name)
+                    FROM novel_tags nt
+                    JOIN tags t ON t.id = nt.tag_id
+                    WHERE nt.novel_id = n.id
                   )
-                  ORDER BY n.created_at DESC
                 )
-                FROM novels n
-                WHERE n.translator_id = t.id
-              ),
-              '[]'::json
+                ORDER BY n.created_at DESC
+              )
+              FROM novels n
+              WHERE n.translator_id = t.id
             ) as novels
           FROM translators t
-          LEFT JOIN translator_stats ts ON ts.translator_id = t.id
-          WHERE t.id = ${translatorId};
+          WHERE t.id = ${translatorId}
         `;
 
-        if (rows.length === 0) {
+        if (!translator) {
           return new Response('Not Found', { status: 404 });
         }
 
-        return new Response(JSON.stringify(rows[0]), {
+        return new Response(JSON.stringify(translator), {
           headers: { 'Content-Type': 'application/json' }
         });
       }
@@ -249,13 +271,12 @@ export default async function handler(request) {
         const { userId, name, description, photoUrl } = await request.json();
 
         // Проверяем существование пользователя
-        const { rows: userRows } = await sql`
+        const { rows: [user] } = await sql`
           SELECT id FROM users WHERE id = ${userId}
-          LIMIT 1
         `;
 
         // Если пользователь не существует, создаем его
-        if (userRows.length === 0) {
+        if (!user) {
           await sql`
             INSERT INTO users (id, name)
             VALUES (${userId}, ${name})
@@ -280,46 +301,44 @@ export default async function handler(request) {
         const [, novelId] = novelLikeMatch;
         const { userId } = await request.json();
 
-        // Проверяем существующий лайк
-        const { rows: likes } = await sql`
-          SELECT * FROM novel_likes 
-          WHERE novel_id = ${novelId} 
-          AND user_id = ${userId}
-          LIMIT 1
-        `;
+        // Используем транзакцию для атомарного обновления
+        const { rows: [result] } = await sql.begin(async (sql) => {
+          // Проверяем существующий лайк
+          const { rows: [existing] } = await sql`
+            SELECT id FROM novel_likes 
+            WHERE novel_id = ${novelId} AND user_id = ${userId}
+          `;
 
-        if (likes.length > 0) {
-          await sql`
-            DELETE FROM novel_likes
-            WHERE novel_id = ${novelId} 
-            AND user_id = ${userId}
-          `;
-          
-          await sql`
-            UPDATE novels
-            SET likes_count = likes_count - 1
-            WHERE id = ${novelId}
-          `;
-        } else {
-          await sql`
-            INSERT INTO novel_likes (novel_id, user_id)
-            VALUES (${novelId}, ${userId})
-          `;
-          
-          await sql`
-            UPDATE novels
-            SET likes_count = likes_count + 1
-            WHERE id = ${novelId}
-          `;
-        }
+          if (existing) {
+            await sql`
+              DELETE FROM novel_likes
+              WHERE novel_id = ${novelId} AND user_id = ${userId}
+            `;
+            
+            return await sql`
+              UPDATE novels
+              SET likes_count = likes_count - 1
+              WHERE id = ${novelId}
+              RETURNING likes_count
+            `;
+          } else {
+            await sql`
+              INSERT INTO novel_likes (novel_id, user_id)
+              VALUES (${novelId}, ${userId})
+            `;
+            
+            return await sql`
+              UPDATE novels
+              SET likes_count = likes_count + 1
+              WHERE id = ${novelId}
+              RETURNING likes_count
+            `;
+          }
+        });
 
-        const { rows: [novel] } = await sql`
-          SELECT likes_count FROM novels WHERE id = ${novelId}
-        `;
-
-        return new Response(JSON.stringify({ 
-          likes_count: novel.likes_count,
-          is_liked: !likes.length
+        return new Response(JSON.stringify({
+          likes_count: result.likes_count,
+          is_liked: !existing
         }), {
           headers: { 'Content-Type': 'application/json' }
         });
@@ -332,13 +351,12 @@ export default async function handler(request) {
         const { userId, content } = await request.json();
 
         // Проверяем существование пользователя
-        const { rows: userRows } = await sql`
+        const { rows: [user] } = await sql`
           SELECT id FROM users WHERE id = ${userId}
-          LIMIT 1
         `;
 
         // Если пользователь не существует, создаем его
-        if (userRows.length === 0) {
+        if (!user) {
           await sql`
             INSERT INTO users (id, name)
             VALUES (${userId}, ${`User ${userId}`})
@@ -347,23 +365,20 @@ export default async function handler(request) {
 
         // Добавляем комментарий
         const { rows: [comment] } = await sql`
-          INSERT INTO chapter_comments (chapter_id, user_id, content)
-          VALUES (${chapterId}, ${userId}, ${content})
-          RETURNING *
-        `;
-
-        // Получаем информацию о пользователе
-        const { rows: [commentWithUser] } = await sql`
+          WITH new_comment AS (
+            INSERT INTO chapter_comments (chapter_id, user_id, content)
+            VALUES (${chapterId}, ${userId}, ${content})
+            RETURNING *
+          )
           SELECT 
-            c.*,
+            nc.*,
             u.name as user_name,
             u.photo_url as user_photo
-          FROM chapter_comments c
-          JOIN users u ON u.id = c.user_id
-          WHERE c.id = ${comment.id}
+          FROM new_comment nc
+          JOIN users u ON u.id = nc.user_id
         `;
 
-        return new Response(JSON.stringify(commentWithUser), {
+        return new Response(JSON.stringify(comment), {
           headers: { 'Content-Type': 'application/json' }
         });
       }
@@ -371,7 +386,6 @@ export default async function handler(request) {
 
     // PUT запросы
     if (request.method === 'PUT') {
-      // Обновление профиля переводчика
       const translatorUpdateMatch = path.match(/^\/api\/translators\/(\d+)$/);
       if (translatorUpdateMatch) {
         const [, translatorId] = translatorUpdateMatch;
@@ -381,7 +395,8 @@ export default async function handler(request) {
           UPDATE translators
           SET 
             name = ${name},
-            description = ${description}
+            description = ${description},
+            updated_at = CURRENT_TIMESTAMP
           WHERE id = ${translatorId}
           RETURNING *
         `;
@@ -398,34 +413,28 @@ export default async function handler(request) {
 
     // DELETE запросы
     if (request.method === 'DELETE') {
-      const data = await request.json();
-
-      // Удаление комментария
       const commentDeleteMatch = path.match(/^\/api\/comments\/(\d+)$/);
       if (commentDeleteMatch) {
         const [, commentId] = commentDeleteMatch;
+        const { userId } = await request.json();
 
         // Проверяем права на удаление
         const { rows: [comment] } = await sql`
-          SELECT * FROM chapter_comments
-          WHERE id = ${commentId} 
-          AND user_id = ${data.userId}
+          DELETE FROM chapter_comments
+          WHERE id = ${commentId} AND user_id = ${userId}
+          RETURNING id
         `;
 
         if (!comment) {
           return new Response('Forbidden', { status: 403 });
         }
 
-        await sql`
-          DELETE FROM chapter_comments
-          WHERE id = ${commentId}
-        `;
-
         return new Response(null, { status: 204 });
       }
     }
 
     return new Response('Not Found', { status: 404 });
+
   } catch (error) {
     console.error('API Error:', error);
     return new Response(JSON.stringify({
