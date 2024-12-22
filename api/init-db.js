@@ -2,7 +2,7 @@ import { sql } from '@vercel/postgres';
 
 const dropAllTables = async () => {
  // Удаляем таблицы одним запросом для оптимизации
- await sql.query(`
+ await sql`
    DROP TABLE IF EXISTS chapter_comments CASCADE;
    DROP TABLE IF EXISTS chapter_likes CASCADE;
    DROP TABLE IF EXISTS novel_likes CASCADE;
@@ -12,12 +12,13 @@ const dropAllTables = async () => {
    DROP TABLE IF EXISTS tags CASCADE;
    DROP TABLE IF EXISTS translators CASCADE;
    DROP TABLE IF EXISTS users CASCADE;
- `);
+ `;
 };
 
 const createTables = async () => {
- // Создаем таблицы одной транзакцией
- return sql.begin(async (sql) => {
+ await sql`BEGIN`;
+
+ try {
    // 1. Users table
    await sql`
      CREATE TABLE users (
@@ -110,12 +111,18 @@ const createTables = async () => {
        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
      )
    `;
- });
+
+   await sql`COMMIT`;
+ } catch (error) {
+   await sql`ROLLBACK`;
+   throw error;
+ }
 };
 
 const createIndexes = async () => {
- // Создаем индексы одной транзакцией
- return sql.begin(async (sql) => {
+ try {
+   await sql`BEGIN`;
+
    await sql`CREATE INDEX idx_users_created_at ON users(created_at)`;
    await sql`CREATE INDEX idx_translators_user_id ON translators(user_id)`;
    await sql`CREATE INDEX idx_translators_created_at ON translators(created_at)`;
@@ -125,28 +132,32 @@ const createIndexes = async () => {
    await sql`CREATE INDEX idx_chapters_number ON chapters(number)`;
    await sql`CREATE INDEX idx_novel_tags_tag_id ON novel_tags(tag_id)`;
    await sql`CREATE INDEX idx_novel_likes_user_id ON novel_likes(user_id)`;
- });
+
+   await sql`COMMIT`;
+ } catch (error) {
+   await sql`ROLLBACK`;
+   throw error;
+ }
 };
 
 const insertTestData = async () => {
- return sql.begin(async (sql) => {
-   // 1. Create test user and translator in one transaction
-   const { rows: [{ id: translatorId }] } = await sql`
-     WITH new_user AS (
-       INSERT INTO users (id, name, photo_url)
-       VALUES (12345, 'Test User', 'https://example.com/photo.jpg')
-       RETURNING id
-     ),
-     new_translator AS (
-       INSERT INTO translators (name, description, user_id)
-       VALUES (
-         'Саня',
-         'Повседневность и университеты. А скоро будут и триллеры.',
-         12345
-       )
-       RETURNING id
+ try {
+   await sql`BEGIN`;
+
+   // 1. Create test user and translator
+   await sql`
+     INSERT INTO users (id, name, photo_url)
+     VALUES (12345, 'Test User', 'https://example.com/photo.jpg')
+   `;
+   
+   const { rows: [translator] } = await sql`
+     INSERT INTO translators (name, description, user_id)
+     VALUES (
+       'Саня', 
+       'Повседневность и университеты. А скоро будут и триллеры.',
+       12345
      )
-     SELECT id FROM new_translator
+     RETURNING id
    `;
 
    // 2. Insert all tags at once
@@ -157,55 +168,63 @@ const insertTestData = async () => {
        ('боевик'),('хоррор'),('повседневность'),('триллер')
    `;
 
-   // 3. Create novel and get tags in one query
-   const { rows: [{ id: novelId }] } = await sql`
-     WITH new_novel AS (
-       INSERT INTO novels (title, description, status, translator_id)
-       VALUES (
-         'Университет: Начало',
-         'История о студенте, который внезапно обнаруживает, что его университет скрывает древние тайны.',
-         'в процессе',
-         ${translatorId}
-       )
-       RETURNING id
-     ),
-     selected_tags AS (
-       SELECT id FROM tags WHERE name IN ('повседневность', 'триллер')
-     ),
-     tag_links AS (
-       INSERT INTO novel_tags (novel_id, tag_id)
-       SELECT new_novel.id, selected_tags.id
-       FROM new_novel CROSS JOIN selected_tags
+   // 3. Create test novel
+   const { rows: [novel] } = await sql`
+     INSERT INTO novels (title, description, status, translator_id)
+     VALUES (
+       'Университет: Начало',
+       'История о студенте, который внезапно обнаруживает, что его университет скрывает древние тайны.',
+       'в процессе',
+       ${translator.id}
      )
-     SELECT id FROM new_novel
+     RETURNING id
    `;
 
-   // 4. Create chapters and comment in one batch
-   await sql`
-     WITH chapter1 AS (
-       INSERT INTO chapters (novel_id, number, title, content)
-       VALUES (
-         ${novelId},
-         1,
-         'Странное поступление',
-         'Когда я впервые переступил порог университета, я и представить не мог, что моя жизнь изменится навсегда.'
-       )
-       RETURNING id
-     ),
-     chapter2 AS (
-       INSERT INTO chapters (novel_id, number, title, content)
-       VALUES (
-         ${novelId},
-         2,
-         'Первый день',
-         'Аудитория 42-б выглядела совершенно обычно, если не считать странных символов на стенах.'
-       )
-     )
-     INSERT INTO chapter_comments (chapter_id, user_id, content)
-     SELECT id, 12345, 'Очень интересное начало! Жду продолжения'
-     FROM chapter1
+   // 4. Link novel with tags
+   const { rows: tags } = await sql`
+     SELECT id FROM tags WHERE name IN ('повседневность', 'триллер')
    `;
- });
+
+   for (const tag of tags) {
+     await sql`
+       INSERT INTO novel_tags (novel_id, tag_id)
+       VALUES (${novel.id}, ${tag.id})
+     `;
+   }
+
+   // 5. Create test chapters
+   const { rows: [chapter1] } = await sql`
+     INSERT INTO chapters (novel_id, number, title, content)
+     VALUES (
+       ${novel.id},
+       1,
+       'Странное поступление',
+       'Когда я впервые переступил порог университета, я и представить не мог, что моя жизнь изменится навсегда.'
+     )
+     RETURNING id
+   `;
+
+   await sql`
+     INSERT INTO chapters (novel_id, number, title, content)
+     VALUES (
+       ${novel.id},
+       2,
+       'Первый день',
+       'Аудитория 42-б выглядела совершенно обычно, если не считать странных символов на стенах.'
+     )
+   `;
+
+   // 6. Create test comment
+   await sql`
+     INSERT INTO chapter_comments (chapter_id, user_id, content)
+     VALUES (${chapter1.id}, 12345, 'Очень интересное начало! Жду продолжения')
+   `;
+
+   await sql`COMMIT`;
+ } catch (error) {
+   await sql`ROLLBACK`;
+   throw error;
+ }
 };
 
 export default async function handler(request) {
