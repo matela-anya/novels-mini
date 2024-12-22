@@ -8,7 +8,8 @@ const dropAllTables = async () => {
   ];
 
   for (const table of tables) {
-    await sql`DROP TABLE IF EXISTS ${sql(table)} CASCADE;`;
+    // Используем корректный синтаксис для sql tagged templates
+    await sql`DROP TABLE IF EXISTS ${sql(table)} CASCADE`;
   }
 };
 
@@ -20,7 +21,7 @@ const createTables = async () => {
       name VARCHAR(255) NOT NULL,
       photo_url TEXT,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
+    )
   `;
 
   // 2. Translators table
@@ -32,7 +33,7 @@ const createTables = async () => {
       photo_url TEXT,
       user_id BIGINT UNIQUE REFERENCES users(id),
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
+    )
   `;
 
   // 3. Tags table
@@ -40,7 +41,7 @@ const createTables = async () => {
     CREATE TABLE tags (
       id SERIAL PRIMARY KEY,
       name VARCHAR(100) UNIQUE NOT NULL
-    );
+    )
   `;
 
   // 4. Novels table
@@ -53,7 +54,7 @@ const createTables = async () => {
       translator_id INTEGER REFERENCES translators(id),
       likes_count INTEGER DEFAULT 0,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
+    )
   `;
 
   // 5. Chapters table
@@ -66,7 +67,7 @@ const createTables = async () => {
       content TEXT,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       likes_count INTEGER DEFAULT 0
-    );
+    )
   `;
 
   // Junction tables
@@ -75,7 +76,7 @@ const createTables = async () => {
       novel_id INTEGER REFERENCES novels(id),
       tag_id INTEGER REFERENCES tags(id),
       PRIMARY KEY (novel_id, tag_id)
-    );
+    )
   `;
 
   await sql`
@@ -84,7 +85,16 @@ const createTables = async () => {
       user_id BIGINT REFERENCES users(id),
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       PRIMARY KEY (novel_id, user_id)
-    );
+    )
+  `;
+
+  await sql`
+    CREATE TABLE chapter_likes (
+      chapter_id INTEGER REFERENCES chapters(id),
+      user_id BIGINT REFERENCES users(id),
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (chapter_id, user_id)
+    )
   `;
 
   await sql`
@@ -94,20 +104,20 @@ const createTables = async () => {
       user_id BIGINT REFERENCES users(id),
       content TEXT NOT NULL,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
+    )
   `;
 };
 
 const createIndexes = async () => {
-  await sql`CREATE INDEX idx_users_created_at ON users(created_at);`;
-  await sql`CREATE INDEX idx_translators_user_id ON translators(user_id);`;
-  await sql`CREATE INDEX idx_translators_created_at ON translators(created_at);`;
-  await sql`CREATE INDEX idx_novels_translator_id ON novels(translator_id);`;
-  await sql`CREATE INDEX idx_novels_created_at ON novels(created_at);`;
-  await sql`CREATE INDEX idx_chapters_novel_id ON chapters(novel_id);`;
-  await sql`CREATE INDEX idx_chapters_number ON chapters(number);`;
-  await sql`CREATE INDEX idx_novel_tags_tag_id ON novel_tags(tag_id);`;
-  await sql`CREATE INDEX idx_novel_likes_user_id ON novel_likes(user_id);`;
+  await sql`CREATE INDEX idx_users_created_at ON users(created_at)`;
+  await sql`CREATE INDEX idx_translators_user_id ON translators(user_id)`;
+  await sql`CREATE INDEX idx_translators_created_at ON translators(created_at)`;
+  await sql`CREATE INDEX idx_novels_translator_id ON novels(translator_id)`;
+  await sql`CREATE INDEX idx_novels_created_at ON novels(created_at)`;
+  await sql`CREATE INDEX idx_chapters_novel_id ON chapters(novel_id)`;
+  await sql`CREATE INDEX idx_chapters_number ON chapters(number)`;
+  await sql`CREATE INDEX idx_novel_tags_tag_id ON novel_tags(tag_id)`;
+  await sql`CREATE INDEX idx_novel_likes_user_id ON novel_likes(user_id)`;
 };
 
 const insertTestData = async () => {
@@ -130,9 +140,16 @@ const insertTestData = async () => {
 
   // 3. Create base tags
   await sql`
-    INSERT INTO tags (name) VALUES 
-      ('драма'), ('комедия'), ('романтика'), ('фэнтези'),
-      ('боевик'), ('хоррор'), ('повседневность'), ('триллер')
+    INSERT INTO tags (name) 
+    VALUES 
+      ('драма'),
+      ('комедия'),
+      ('романтика'),
+      ('фэнтези'),
+      ('боевик'),
+      ('хоррор'),
+      ('повседневность'),
+      ('триллер')
   `;
 
   // 4. Create test novel
@@ -149,7 +166,8 @@ const insertTestData = async () => {
 
   // 5. Link novel with tags
   const { rows: tags } = await sql`
-    SELECT id, name FROM tags 
+    SELECT id, name 
+    FROM tags 
     WHERE name IN ('повседневность', 'триллер')
   `;
   
