@@ -6,7 +6,7 @@ const bulkInsert = async (query, data) => {
     await sql`${sql.raw(query)} VALUES ${sql.raw(chunk)};`;
   }
 };
-
+ 
 // Drop existing tables
 const dropTables = async () => {
   const tables = [
