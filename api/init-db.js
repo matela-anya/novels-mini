@@ -92,6 +92,10 @@ const createSchema = async () => {
     await sql`CREATE INDEX idx_novels_translator_id ON novels(translator_id)`;
     await sql`CREATE INDEX idx_tags_novel_id ON novel_tags(novel_id)`;
     await sql`CREATE INDEX idx_tags_tag_id ON novel_tags(tag_id)`;
+    await sql`CREATE INDEX idx_users_id ON users(id)`;
+    await sql`CREATE INDEX idx_translators_user_id ON translators(user_id)`;
+    await sql`CREATE INDEX idx_novels_created_at ON novels(created_at DESC)`;
+    await sql`CREATE INDEX idx_chapters_created_at ON chapters(created_at DESC)`;
 
     await sql`COMMIT`;
   } catch (error) {
