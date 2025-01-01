@@ -146,7 +146,34 @@ const seedData = async () => {
   }
 };
 
+// HTML Interface for Initialization
 export default async function handler(request) {
+  if (request.method === 'GET') {
+    return new Response(`<!DOCTYPE html>
+      <html lang="en">
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Initialize Database</title>
+      </head>
+      <body>
+        <h1>Database Initialization</h1>
+        <button id="init-db-button">Initialize Database</button>
+        <script>
+          document.getElementById('init-db-button').addEventListener('click', async () => {
+            const response = await fetch('/api/init-db', { method: 'POST' });
+            const result = await response.json();
+            alert(result.message || 'Initialization complete');
+          });
+        </script>
+      </body>
+      </html>`, {
+      headers: {
+        'Content-Type': 'text/html'
+      }
+    });
+  }
+
   if (request.method !== 'POST') {
     return new Response(JSON.stringify({
       success: false,
