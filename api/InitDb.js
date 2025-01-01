@@ -248,7 +248,7 @@ export default async function handler(request) {
 
  try {
    console.log('Dropping existing tables...');
-   await dropAllTables();
+   await dropTables();
    
    console.log('Creating tables...');
    await createTables();
