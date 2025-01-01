@@ -13,9 +13,9 @@ export default async function handler(request) {
         const limit = parseInt(searchParams.get('limit')) || 10;
         const offset = (page - 1) * limit;
 
-        // Оптимизированный запрос с материализованным CTE
+         // Оптимизированный запрос с CTE
         const { rows: novels } = await sql`
-          WITH MATERIALIZED counts AS (
+          WITH counts AS (
             SELECT 
               n.id as novel_id,
               COUNT(c.id)::int as chapter_count
