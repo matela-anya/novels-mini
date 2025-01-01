@@ -2,20 +2,25 @@ import { sql } from '@vercel/postgres';
 
 // Функция для удаления таблиц
 const dropTables = async () => {
-  await sql`DROP TABLE IF EXISTS chapter_comments CASCADE;
-           DROP TABLE IF EXISTS chapter_likes CASCADE;
-           DROP TABLE IF EXISTS novel_likes CASCADE;
-           DROP TABLE IF EXISTS novel_tags CASCADE;
-           DROP TABLE IF EXISTS chapters CASCADE;
-           DROP TABLE IF EXISTS novels CASCADE;
-           DROP TABLE IF EXISTS tags CASCADE;
-           DROP TABLE IF EXISTS translators CASCADE;
-           DROP TABLE IF EXISTS users CASCADE;`;
+  const tables = [
+    'chapter_comments',
+    'chapter_likes',
+    'novel_likes',
+    'novel_tags',
+    'chapters',
+    'novels',
+    'tags',
+    'translators',
+    'users'
+  ];
+
+  for (const table of tables) {
+    await sql`DROP TABLE IF EXISTS ${sql(table)} CASCADE;`;
+  }
 };
 
 // Функция для создания таблиц
 const createSchema = async () => {
-  // Создаем таблицы в транзакции
   await sql`BEGIN`;
   try {
     await sql`CREATE TABLE users (
