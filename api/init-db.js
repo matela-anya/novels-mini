@@ -118,6 +118,7 @@ const createTables = async () => {
 
 const createIndexes = async () => {
   try {
+    // Создаем индексы по одному
     await sql`CREATE INDEX idx_users_created_at ON users(created_at)`;
     await sql`CREATE INDEX idx_translators_user_id ON translators(user_id)`;
     await sql`CREATE INDEX idx_translators_created_at ON translators(created_at)`;
@@ -135,67 +136,86 @@ const createIndexes = async () => {
 
 const insertTestData = async () => {
   try {
-    // 1. Create test user and translator in one query
-    const { rows: [{ translator_id }] } = await sql`
-      WITH new_user AS (
-        INSERT INTO users (id, name, photo_url)
-        VALUES (12345, 'Test User', 'https://example.com/photo.jpg')
-        RETURNING id
-      ),
-      new_translator AS (
-        INSERT INTO translators (name, description, user_id)
-        VALUES ('Саня', 'Повседневность и университеты. А скоро будут и триллеры.', 12345)
-        RETURNING id
-      )
-      SELECT id as translator_id FROM new_translator;
-    `;
-
-    // 2. Insert tags and get their IDs in one query
-    const { rows: tags } = await sql`
-      WITH new_tags AS (
-        INSERT INTO tags (name) 
-        VALUES ('драма'),('комедия'),('романтика'),('фэнтези'),
-               ('боевик'),('хоррор'),('повседневность'),('триллер')
-        RETURNING id, name
-      )
-      SELECT * FROM new_tags WHERE name IN ('повседневность', 'триллер');
-    `;
-
-    // 3. Create novel and link tags in one query
-    const { rows: [{ novel_id }] } = await sql`
-      WITH new_novel AS (
-        INSERT INTO novels (title, description, status, translator_id)
-        VALUES (
-          'Университет: Начало',
-          'История о студенте, который внезапно обнаруживает, что его университет скрывает древние тайны.',
-          'в процессе',
-          ${translator_id}
-        )
-        RETURNING id
-      ),
-      tag_links AS (
-        INSERT INTO novel_tags (novel_id, tag_id)
-        SELECT new_novel.id, t.id
-        FROM new_novel, unnest(array[${tags[0].id}, ${tags[1].id}]) AS t(id)
-      )
-      SELECT id as novel_id FROM new_novel;
-    `;
-
-    // 4. Insert chapters and comment in one query
+    // 1. Создаем пользователя
     await sql`
-      WITH new_chapters AS (
-        INSERT INTO chapters (novel_id, number, title, content)
-        VALUES 
-          (${novel_id}, 1, 'Странное поступление', 
-           'Когда я впервые переступил порог университета, я и представить не мог, что моя жизнь изменится навсегда.'),
-          (${novel_id}, 2, 'Первый день',
-           'Аудитория 42-б выглядела совершенно обычно, если не считать странных символов на стенах.')
-        RETURNING id, number
+      INSERT INTO users (id, name, photo_url)
+      VALUES (12345, 'Test User', 'https://example.com/photo.jpg')
+    `;
+
+    // 2. Создаем переводчика
+    const { rows: [translator] } = await sql`
+      INSERT INTO translators (name, description, user_id)
+      VALUES (
+        'Саня',
+        'Повседневность и университеты. А скоро будут и триллеры.',
+        12345
       )
+      RETURNING id
+    `;
+
+    // 3. Создаем теги
+    const { rows: tags } = await sql`
+      INSERT INTO tags (name) 
+      VALUES 
+        ('драма'),('комедия'),('романтика'),('фэнтези'),
+        ('боевик'),('хоррор'),('повседневность'),('триллер')
+      RETURNING id, name
+    `;
+
+    // Находим нужные теги
+    const povTag = tags.find(t => t.name === 'повседневность');
+    const thrillTag = tags.find(t => t.name === 'триллер');
+
+    // 4. Создаем новеллу
+    const { rows: [novel] } = await sql`
+      INSERT INTO novels (title, description, status, translator_id)
+      VALUES (
+        'Университет: Начало',
+        'История о студенте, который внезапно обнаруживает, что его университет скрывает древние тайны.',
+        'в процессе',
+        ${translator.id}
+      )
+      RETURNING id
+    `;
+
+    // 5. Связываем новеллу с тегами
+    await sql`
+      INSERT INTO novel_tags (novel_id, tag_id)
+      VALUES 
+        (${novel.id}, ${povTag.id}),
+        (${novel.id}, ${thrillTag.id})
+    `;
+
+    // 6. Создаем главы
+    const { rows: [chapter1] } = await sql`
+      INSERT INTO chapters (novel_id, number, title, content)
+      VALUES (
+        ${novel.id},
+        1,
+        'Странное поступление',
+        'Когда я впервые переступил порог университета, я и представить не мог, что моя жизнь изменится навсегда.'
+      )
+      RETURNING id
+    `;
+
+    await sql`
+      INSERT INTO chapters (novel_id, number, title, content)
+      VALUES (
+        ${novel.id},
+        2,
+        'Первый день',
+        'Аудитория 42-б выглядела совершенно обычно, если не считать странных символов на стенах.'
+      )
+    `;
+
+    // 7. Добавляем комментарий
+    await sql`
       INSERT INTO chapter_comments (chapter_id, user_id, content)
-      SELECT id, 12345, 'Очень интересное начало! Жду продолжения'
-      FROM new_chapters
-      WHERE number = 1;
+      VALUES (
+        ${chapter1.id},
+        12345,
+        'Очень интересное начало! Жду продолжения'
+      )
     `;
 
   } catch (error) {
