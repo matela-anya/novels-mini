@@ -25,10 +25,10 @@ const App = () => {
         console.log('Telegram WebApp initialized:', tg);
         console.log('User data:', tg.initDataUnsafe?.user);
         setWebApp(tg);
-        setIsLoading(false);
       } catch (err) {
         console.error('Failed to initialize Telegram Web App:', err);
         setError(err.message);
+      } finally {
         setIsLoading(false);
       }
     };
@@ -36,18 +36,50 @@ const App = () => {
     init();
   }, []);
 
+  // Показываем индикатор загрузки
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4 bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mb-4"></div>
+          <div className="text-gray-600">Загрузка приложения...</div>
+        </div>
+      </div>
+    );
+  }
+
+  // Показываем ошибку
   if (error) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-4">
-        <div className="text-red-500 text-center">
-          <div className="text-lg font-bold mb-2">Ошибка инициализации</div>
-          <div>{error}</div>
+      <div className="min-h-screen flex items-center justify-center p-4 bg-gray-50">
+        <div className="text-center bg-white p-6 rounded-lg shadow-sm max-w-md">
+          <div className="text-red-500 mb-2 text-xl">Ошибка инициализации</div>
+          <div className="text-gray-600 mb-4">{error}</div>
           <button 
             onClick={() => window.location.reload()}
-            className="mt-4 px-4 py-2 bg-blue-500 text-white rounded"
+            className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
           >
-            Обновить
+            Попробовать снова
           </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Приложение не инициализировано
+  if (!webApp) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4 bg-gray-50">
+        <div className="text-center bg-white p-6 rounded-lg shadow-sm">
+          <div className="text-gray-600 mb-4">
+            Приложение должно быть запущено в Telegram
+          </div>
+          <a 
+            href={`https://t.me/${process.env.NEXT_PUBLIC_BOT_USERNAME}/app`}
+            className="px-4 py-2 bg-blue-500 text-white rounded-lg inline-block hover:bg-blue-600 transition-colors"
+          >
+            Открыть в Telegram
+          </a>
         </div>
       </div>
     );
