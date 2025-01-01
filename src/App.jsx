@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { initTelegramApp } from './utils/telegram';
-import InitDb from './pages/InitDb';
+import init-db from './pages/init-db';
 
 // Pages
 import Home from './pages/Home';
