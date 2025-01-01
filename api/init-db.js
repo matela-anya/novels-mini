@@ -1,15 +1,16 @@
 import { sql } from '@vercel/postgres';
 
 const dropAllTables = async () => {
-  await sql`
-    DO $$ DECLARE
-      r RECORD;
-    BEGIN
-      FOR r IN (SELECT tablename FROM pg_tables WHERE schemaname = current_schema()) LOOP
-        EXECUTE 'DROP TABLE IF EXISTS ' || quote_ident(r.tablename) || ' CASCADE';
-      END LOOP;
-    END $$;
-  `;
+  // Удаляем таблицы по одной в правильном порядке
+  await sql`DROP TABLE IF EXISTS chapter_comments CASCADE`;
+  await sql`DROP TABLE IF EXISTS chapter_likes CASCADE`;
+  await sql`DROP TABLE IF EXISTS novel_likes CASCADE`;
+  await sql`DROP TABLE IF EXISTS novel_tags CASCADE`;
+  await sql`DROP TABLE IF EXISTS chapters CASCADE`;
+  await sql`DROP TABLE IF EXISTS novels CASCADE`;
+  await sql`DROP TABLE IF EXISTS tags CASCADE`;
+  await sql`DROP TABLE IF EXISTS translators CASCADE`;
+  await sql`DROP TABLE IF EXISTS users CASCADE`;
 };
 
 const createTables = async () => {
