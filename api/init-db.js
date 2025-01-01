@@ -87,9 +87,11 @@ const createSchema = async () => {
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )`;
 
-    // Создаем только самые необходимые индексы
+    // Создаем индексы для оптимизации запросов
     await sql`CREATE INDEX idx_chapters_novel_id ON chapters(novel_id)`;
     await sql`CREATE INDEX idx_novels_translator_id ON novels(translator_id)`;
+    await sql`CREATE INDEX idx_tags_novel_id ON novel_tags(novel_id)`;
+    await sql`CREATE INDEX idx_tags_tag_id ON novel_tags(tag_id)`;
 
     await sql`COMMIT`;
   } catch (error) {
