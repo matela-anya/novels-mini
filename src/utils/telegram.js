@@ -11,10 +11,23 @@ const isTelegramWebView = () => {
 export const initTelegramApp = () => {
   return new Promise((resolve, reject) => {
     try {
-      // Проверяем, был ли уже загружен скрипт
+      // Проверяем, запущены ли мы в Telegram
+      if (!window.matchMedia('(display-mode: standalone)').matches && 
+          !window.location.href.includes('telegram')) {
+        reject(new Error('Приложение должно быть запущено в Telegram'));
+        return;
+      }
+
+      // Проверяем, был ли уже загружен и инициализирован WebApp
       if (window.Telegram?.WebApp) {
-        console.log('Telegram WebApp already initialized');
+        console.log('Telegram WebApp уже инициализирован');
         const tg = window.Telegram.WebApp;
+        
+        // Проверяем инициализационные данные
+        if (!tg.initDataUnsafe || !tg.initData) {
+          console.warn('Отсутствуют данные инициализации WebApp');
+        }
+
         tg.ready();
         tg.expand();
         
@@ -31,29 +44,26 @@ export const initTelegramApp = () => {
         return;
       }
 
-      console.log('Initializing Telegram WebApp...');
-
-      // Загружаем скрипт Telegram WebApp если он ещё не загружен
+      console.log('Загрузка скрипта Telegram WebApp...');
       const script = document.createElement('script');
       script.src = 'https://telegram.org/js/telegram-web-app.js';
       script.async = true;
 
       script.onload = () => {
-        // Проверяем успешность инициализации
         if (!window.Telegram?.WebApp) {
-          reject(new Error('Telegram WebApp failed to initialize'));
+          reject(new Error('Не удалось инициализировать Telegram WebApp'));
           return;
         }
 
         const tg = window.Telegram.WebApp;
-
-        // Проверяем валидность initData
+        
+        // Проверяем инициализационные данные
         if (!tg.initDataUnsafe || !tg.initData) {
-          console.warn('WebApp initialization data is missing');
+          console.warn('Отсутствуют данные инициализации WebApp');
         }
 
-        console.log('WebApp successfully initialized');
-
+        console.log('WebApp успешно инициализирован');
+        
         tg.ready();
         tg.expand();
 
@@ -70,7 +80,7 @@ export const initTelegramApp = () => {
       };
 
       script.onerror = () => {
-        reject(new Error('Failed to load Telegram WebApp script'));
+        reject(new Error('Не удалось загрузить скрипт Telegram WebApp'));
       };
 
       document.head.appendChild(script);
@@ -183,14 +193,16 @@ export const getSafeAreaInsets = () => {
   };
 };
 
-// utils/telegram.js
+// Получение данных пользователя
 export const getUserData = () => {
   try {
-    // Получаем объект WebApp из Telegram
+    if (!isTelegramWebView()) {
+      throw new Error('Not in Telegram WebApp environment');
+    }
+
     const telegram = window.Telegram.WebApp;
     
-    // Если есть инициализированный WebApp и данные пользователя
-    if (telegram && telegram.initDataUnsafe && telegram.initDataUnsafe.user) {
+    if (telegram.initDataUnsafe?.user) {
       return telegram.initDataUnsafe.user;
     }
     
