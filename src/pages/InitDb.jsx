@@ -1,43 +1,55 @@
-import React from 'react';
+import React, { useState } from 'react';
 import Header from '../components/Header';
 import { hapticFeedback } from '../utils/telegram';
 
 const InitDb = () => {
-  const [status, setStatus] = React.useState(null);
-  const [error, setError] = React.useState(null);
+  const [status, setStatus] = useState('');
+  const [error, setError] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
 
-  const initDatabase = async () => {
+  const performOperation = async (operation, description) => {
     try {
-      setStatus('Initializing...');
-      console.log('Sending request to /api/init-db');
-      
-      const response = await fetch('/api/init-db', {
+      setStatus(prev => prev + `\n${description}...`);
+      const response = await fetch(`/api/init-db?operation=${operation}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         }
       });
-      
-      console.log('Response status:', response.status);
+
       const data = await response.json();
-      console.log('Response data:', data);
+      if (!response.ok) throw new Error(data.error || `Failed to ${description}`);
       
-      if (!response.ok) throw new Error(data.error || 'Failed to initialize database');
-      
-      setStatus('Database initialized successfully!');
+      setStatus(prev => prev + ` ✓`);
+      return true;
+    } catch (err) {
+      throw new Error(`Failed to ${description}: ${err.message}`);
+    }
+  };
+
+  const initDatabase = async () => {
+    setIsLoading(true);
+    setError(null);
+    setStatus('Starting database initialization...');
+    
+    try {
+      hapticFeedback.impactOccurred('medium');
+
+      await performOperation('drop', 'Drop existing tables');
+      await performOperation('create', 'Create tables');
+      await performOperation('indexes', 'Create indexes');
+      await performOperation('test-data', 'Insert test data');
+
+      setStatus(prev => prev + '\n\nDatabase initialized successfully! ✨');
       hapticFeedback.notificationOccurred('success');
-      setError(null);
     } catch (err) {
       console.error('Initialization error:', err);
       setError(err.message);
       hapticFeedback.notificationOccurred('error');
-      setStatus(null);
+    } finally {
+      setIsLoading(false);
     }
   };
-
-  React.useEffect(() => {
-    console.log('InitDb component mounted');
-  }, []);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -45,10 +57,9 @@ const InitDb = () => {
 
       <div className="container mx-auto px-4 py-6">
         <div className="bg-white rounded-lg shadow-sm p-6">
-          <h1 className="text-xl font-semibold mb-4">Инициализация базы данных</h1>
-          
           <div className="mb-6">
-            <p className="text-gray-700">
+            <h2 className="text-xl font-semibold mb-2">Инициализация базы данных</h2>
+            <p className="text-gray-600">
               Эта страница предназначена для первичной настройки базы данных.
               Будут созданы все необходимые таблицы и тестовые данные.
             </p>
@@ -56,29 +67,31 @@ const InitDb = () => {
 
           <button
             onClick={initDatabase}
-            disabled={status === 'Initializing...'}
+            disabled={isLoading}
             className={`
               w-full px-4 py-3 rounded-lg font-medium
-              ${status === 'Initializing...' 
+              ${isLoading 
                 ? 'bg-gray-100 text-gray-400'
                 : 'bg-blue-500 text-white hover:bg-blue-600 active:bg-blue-700'
               }
               transition-colors duration-200
             `}
           >
-            {status === 'Initializing...' ? 'Инициализация...' : 'Инициализировать базу данных'}
+            {isLoading ? 'Инициализация...' : 'Инициализировать базу данных'}
           </button>
 
-          {status && status !== 'Initializing...' && (
-            <div className="mt-4 p-4 bg-green-50 text-green-700 rounded-lg">
-              {status}
+          {status && (
+            <div className="mt-6 p-4 bg-gray-50 rounded-lg">
+              <pre className="whitespace-pre-line text-sm text-gray-700">
+                {status}
+              </pre>
             </div>
           )}
 
           {error && (
-            <div className="mt-4 p-4 bg-red-50 text-red-600 rounded-lg">
-              <p className="font-medium">Ошибка:</p>
-              <p>{error}</p>
+            <div className="mt-6 p-4 bg-red-50 text-red-600 rounded-lg">
+              <div className="font-medium">Ошибка:</div>
+              <div className="text-sm">{error}</div>
             </div>
           )}
         </div>
