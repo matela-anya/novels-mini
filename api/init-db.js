@@ -1,18 +1,16 @@
 import { sql } from '@vercel/postgres';
 
 const dropAllTables = async () => {
- // Удаляем таблицы одним запросом для оптимизации
- await sql`
-   DROP TABLE IF EXISTS chapter_comments CASCADE;
-   DROP TABLE IF EXISTS chapter_likes CASCADE;
-   DROP TABLE IF EXISTS novel_likes CASCADE;
-   DROP TABLE IF EXISTS novel_tags CASCADE;
-   DROP TABLE IF EXISTS chapters CASCADE;
-   DROP TABLE IF EXISTS novels CASCADE;
-   DROP TABLE IF EXISTS tags CASCADE;
-   DROP TABLE IF EXISTS translators CASCADE;
-   DROP TABLE IF EXISTS users CASCADE;
- `;
+  // Удаляем таблицы по одной в правильном порядке
+  await sql`DROP TABLE IF EXISTS chapter_comments CASCADE`;
+  await sql`DROP TABLE IF EXISTS chapter_likes CASCADE`;
+  await sql`DROP TABLE IF EXISTS novel_likes CASCADE`;
+  await sql`DROP TABLE IF EXISTS novel_tags CASCADE`;
+  await sql`DROP TABLE IF EXISTS chapters CASCADE`;
+  await sql`DROP TABLE IF EXISTS novels CASCADE`;
+  await sql`DROP TABLE IF EXISTS tags CASCADE`;
+  await sql`DROP TABLE IF EXISTS translators CASCADE`;
+  await sql`DROP TABLE IF EXISTS users CASCADE`;
 };
 
 const createTables = async () => {
