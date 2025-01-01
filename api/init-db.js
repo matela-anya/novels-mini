@@ -1,12 +1,5 @@
 import { sql } from '@vercel/postgres';
 
-// Helper function for bulk inserts
-const bulkInsert = async (query, data) => {
-  for (const chunk of data) {
-    await sql`${sql.raw(query)} VALUES ${sql.raw(chunk)};`;
-  }
-};
- 
 // Drop existing tables
 const dropTables = async () => {
   const tables = [
