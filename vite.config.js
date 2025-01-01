@@ -15,12 +15,10 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     sourcemap: true,
-    rollupOptions: {
-      external: ['react/jsx-runtime'], // Указание явной зависимости
-    },
   },
-  define: {
-    'process.env.TELEGRAM_BOT_TOKEN': JSON.stringify(process.env.TELEGRAM_BOT_TOKEN),
-    'process.env.APP_URL': JSON.stringify(process.env.APP_URL),
-  },
+  resolve: {
+    alias: {
+      'react/jsx-runtime': 'react/jsx-runtime.js'
+    }
+  }
 });
