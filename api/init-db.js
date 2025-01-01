@@ -1,7 +1,6 @@
 import { sql } from '@vercel/postgres';
 
 const dropAllTables = async () => {
-  // Удаляем таблицы по одной в правильном порядке
   await sql`DROP TABLE IF EXISTS chapter_comments CASCADE`;
   await sql`DROP TABLE IF EXISTS chapter_likes CASCADE`;
   await sql`DROP TABLE IF EXISTS novel_likes CASCADE`;
@@ -15,17 +14,18 @@ const dropAllTables = async () => {
 
 const createTables = async () => {
   try {
-    // 1. Users table
+    // Создаем таблицы последовательно
+    
+    // 1. Users
     await sql`
       CREATE TABLE users (
         id BIGINT PRIMARY KEY,
         name VARCHAR(255) NOT NULL,
         photo_url TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `;
+      )`;
 
-    // 2. Translators table
+    // 2. Translators
     await sql`
       CREATE TABLE translators (
         id SERIAL PRIMARY KEY,
@@ -34,18 +34,16 @@ const createTables = async () => {
         photo_url TEXT,
         user_id BIGINT UNIQUE REFERENCES users(id),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `;
+      )`;
 
-    // 3. Tags table
+    // 3. Tags
     await sql`
       CREATE TABLE tags (
         id SERIAL PRIMARY KEY,
         name VARCHAR(100) UNIQUE NOT NULL
-      )
-    `;
+      )`;
 
-    // 4. Novels table
+    // 4. Novels
     await sql`
       CREATE TABLE novels (
         id SERIAL PRIMARY KEY,
@@ -55,10 +53,9 @@ const createTables = async () => {
         translator_id INTEGER REFERENCES translators(id),
         likes_count INTEGER DEFAULT 0,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `;
+      )`;
 
-    // 5. Chapters table
+    // 5. Chapters
     await sql`
       CREATE TABLE chapters (
         id SERIAL PRIMARY KEY,
@@ -68,39 +65,35 @@ const createTables = async () => {
         content TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         likes_count INTEGER DEFAULT 0
-      )
-    `;
+      )`;
 
-    // 6. Novel tags table
+    // 6. Novel Tags
     await sql`
       CREATE TABLE novel_tags (
         novel_id INTEGER REFERENCES novels(id),
         tag_id INTEGER REFERENCES tags(id),
         PRIMARY KEY (novel_id, tag_id)
-      )
-    `;
+      )`;
 
-    // 7. Novel likes table
+    // 7. Novel Likes
     await sql`
       CREATE TABLE novel_likes (
         novel_id INTEGER REFERENCES novels(id),
         user_id BIGINT REFERENCES users(id),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         PRIMARY KEY (novel_id, user_id)
-      )
-    `;
+      )`;
 
-    // 8. Chapter likes table
+    // 8. Chapter Likes
     await sql`
       CREATE TABLE chapter_likes (
         chapter_id INTEGER REFERENCES chapters(id),
         user_id BIGINT REFERENCES users(id),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         PRIMARY KEY (chapter_id, user_id)
-      )
-    `;
+      )`;
 
-    // 9. Chapter comments table
+    // 9. Chapter Comments
     await sql`
       CREATE TABLE chapter_comments (
         id SERIAL PRIMARY KEY,
@@ -108,8 +101,8 @@ const createTables = async () => {
         user_id BIGINT REFERENCES users(id),
         content TEXT NOT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `;
+      )`;
+
   } catch (error) {
     console.error('Error creating tables:', error);
     throw error;
@@ -118,16 +111,11 @@ const createTables = async () => {
 
 const createIndexes = async () => {
   try {
-    // Создаем индексы по одному
-    await sql`CREATE INDEX idx_users_created_at ON users(created_at)`;
-    await sql`CREATE INDEX idx_translators_user_id ON translators(user_id)`;
-    await sql`CREATE INDEX idx_translators_created_at ON translators(created_at)`;
-    await sql`CREATE INDEX idx_novels_translator_id ON novels(translator_id)`;
-    await sql`CREATE INDEX idx_novels_created_at ON novels(created_at)`;
+    // Создаем только самые необходимые индексы
     await sql`CREATE INDEX idx_chapters_novel_id ON chapters(novel_id)`;
     await sql`CREATE INDEX idx_chapters_number ON chapters(number)`;
+    await sql`CREATE INDEX idx_novels_translator_id ON novels(translator_id)`;
     await sql`CREATE INDEX idx_novel_tags_tag_id ON novel_tags(tag_id)`;
-    await sql`CREATE INDEX idx_novel_likes_user_id ON novel_likes(user_id)`;
   } catch (error) {
     console.error('Error creating indexes:', error);
     throw error;
@@ -136,37 +124,34 @@ const createIndexes = async () => {
 
 const insertTestData = async () => {
   try {
-    // 1. Создаем пользователя
+    // 1. Создаем тестового пользователя
     await sql`
-      INSERT INTO users (id, name, photo_url)
-      VALUES (12345, 'Test User', 'https://example.com/photo.jpg')
-    `;
+      INSERT INTO users (id, name, photo_url) 
+      VALUES (12345, 'Test User', 'https://example.com/photo.jpg')`;
 
     // 2. Создаем переводчика
     const { rows: [translator] } = await sql`
       INSERT INTO translators (name, description, user_id)
       VALUES (
-        'Саня',
+        'Саня', 
         'Повседневность и университеты. А скоро будут и триллеры.',
         12345
       )
-      RETURNING id
-    `;
+      RETURNING id`;
 
     // 3. Создаем теги
-    const { rows: tags } = await sql`
+    await sql`
       INSERT INTO tags (name) 
       VALUES 
-        ('драма'),('комедия'),('романтика'),('фэнтези'),
-        ('боевик'),('хоррор'),('повседневность'),('триллер')
-      RETURNING id, name
-    `;
+        ('повседневность'),
+        ('триллер')
+      RETURNING id`;
 
-    // Находим нужные теги
-    const povTag = tags.find(t => t.name === 'повседневность');
-    const thrillTag = tags.find(t => t.name === 'триллер');
+    // 4. Получаем ID тегов
+    const { rows: tags } = await sql`
+      SELECT id, name FROM tags`;
 
-    // 4. Создаем новеллу
+    // 5. Создаем новеллу
     const { rows: [novel] } = await sql`
       INSERT INTO novels (title, description, status, translator_id)
       VALUES (
@@ -175,18 +160,16 @@ const insertTestData = async () => {
         'в процессе',
         ${translator.id}
       )
-      RETURNING id
-    `;
+      RETURNING id`;
 
-    // 5. Связываем новеллу с тегами
-    await sql`
-      INSERT INTO novel_tags (novel_id, tag_id)
-      VALUES 
-        (${novel.id}, ${povTag.id}),
-        (${novel.id}, ${thrillTag.id})
-    `;
+    // 6. Связываем теги с новеллой
+    for (const tag of tags) {
+      await sql`
+        INSERT INTO novel_tags (novel_id, tag_id)
+        VALUES (${novel.id}, ${tag.id})`;
+    }
 
-    // 6. Создаем главы
+    // 7. Создаем первую главу
     const { rows: [chapter1] } = await sql`
       INSERT INTO chapters (novel_id, number, title, content)
       VALUES (
@@ -195,9 +178,9 @@ const insertTestData = async () => {
         'Странное поступление',
         'Когда я впервые переступил порог университета, я и представить не мог, что моя жизнь изменится навсегда.'
       )
-      RETURNING id
-    `;
+      RETURNING id`;
 
+    // 8. Создаем вторую главу
     await sql`
       INSERT INTO chapters (novel_id, number, title, content)
       VALUES (
@@ -205,18 +188,16 @@ const insertTestData = async () => {
         2,
         'Первый день',
         'Аудитория 42-б выглядела совершенно обычно, если не считать странных символов на стенах.'
-      )
-    `;
+      )`;
 
-    // 7. Добавляем комментарий
+    // 9. Добавляем комментарий
     await sql`
       INSERT INTO chapter_comments (chapter_id, user_id, content)
       VALUES (
         ${chapter1.id},
         12345,
         'Очень интересное начало! Жду продолжения'
-      )
-    `;
+      )`;
 
   } catch (error) {
     console.error('Error inserting test data:', error);
