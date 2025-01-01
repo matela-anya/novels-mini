@@ -1,6 +1,13 @@
 import { sql } from '@vercel/postgres';
 
-// Функция для удаления таблиц
+// Helper function for bulk inserts
+const bulkInsert = async (query, data) => {
+  for (const chunk of data) {
+    await sql`${sql.raw(query)} VALUES ${sql.raw(chunk)};`;
+  }
+};
+
+// Drop existing tables
 const dropTables = async () => {
   const tables = [
     'chapter_comments',
@@ -13,13 +20,12 @@ const dropTables = async () => {
     'translators',
     'users'
   ];
-
   for (const table of tables) {
     await sql`DROP TABLE IF EXISTS ${sql(table)} CASCADE;`;
   }
 };
 
-// Функция для создания таблиц
+// Create schema
 const createSchema = async () => {
   await sql`BEGIN`;
   try {
@@ -28,7 +34,7 @@ const createSchema = async () => {
       name VARCHAR(255) NOT NULL,
       photo_url TEXT,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )`;
+    );`;
 
     await sql`CREATE TABLE translators (
       id SERIAL PRIMARY KEY,
@@ -37,7 +43,7 @@ const createSchema = async () => {
       photo_url TEXT,
       user_id BIGINT UNIQUE REFERENCES users(id),
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )`;
+    );`;
 
     await sql`CREATE TABLE novels (
       id SERIAL PRIMARY KEY,
@@ -47,12 +53,12 @@ const createSchema = async () => {
       translator_id INTEGER REFERENCES translators(id),
       likes_count INTEGER DEFAULT 0,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )`;
+    );`;
 
     await sql`CREATE TABLE tags (
       id SERIAL PRIMARY KEY,
       name VARCHAR(100) UNIQUE NOT NULL
-    )`;
+    );`;
 
     await sql`CREATE TABLE chapters (
       id SERIAL PRIMARY KEY,
@@ -62,27 +68,27 @@ const createSchema = async () => {
       content TEXT,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       likes_count INTEGER DEFAULT 0
-    )`;
+    );`;
 
     await sql`CREATE TABLE novel_tags (
       novel_id INTEGER REFERENCES novels(id),
       tag_id INTEGER REFERENCES tags(id),
       PRIMARY KEY (novel_id, tag_id)
-    )`;
+    );`;
 
     await sql`CREATE TABLE novel_likes (
       novel_id INTEGER REFERENCES novels(id),
       user_id BIGINT REFERENCES users(id),
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       PRIMARY KEY (novel_id, user_id)
-    )`;
+    );`;
 
     await sql`CREATE TABLE chapter_likes (
       chapter_id INTEGER REFERENCES chapters(id),
       user_id BIGINT REFERENCES users(id),
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       PRIMARY KEY (chapter_id, user_id)
-    )`;
+    );`;
 
     await sql`CREATE TABLE chapter_comments (
       id SERIAL PRIMARY KEY,
@@ -90,17 +96,16 @@ const createSchema = async () => {
       user_id BIGINT REFERENCES users(id),
       content TEXT NOT NULL,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )`;
+    );`;
 
-    // Создаем индексы для оптимизации запросов
-    await sql`CREATE INDEX idx_chapters_novel_id ON chapters(novel_id)`;
-    await sql`CREATE INDEX idx_novels_translator_id ON novels(translator_id)`;
-    await sql`CREATE INDEX idx_tags_novel_id ON novel_tags(novel_id)`;
-    await sql`CREATE INDEX idx_tags_tag_id ON novel_tags(tag_id)`;
-    await sql`CREATE INDEX idx_users_id ON users(id)`;
-    await sql`CREATE INDEX idx_translators_user_id ON translators(user_id)`;
-    await sql`CREATE INDEX idx_novels_created_at ON novels(created_at DESC)`;
-    await sql`CREATE INDEX idx_chapters_created_at ON chapters(created_at DESC)`;
+    await sql`CREATE INDEX idx_chapters_novel_id ON chapters(novel_id);`;
+    await sql`CREATE INDEX idx_novels_translator_id ON novels(translator_id);`;
+    await sql`CREATE INDEX idx_tags_novel_id ON novel_tags(novel_id);`;
+    await sql`CREATE INDEX idx_tags_tag_id ON novel_tags(tag_id);`;
+    await sql`CREATE INDEX idx_users_id ON users(id);`;
+    await sql`CREATE INDEX idx_translators_user_id ON translators(user_id);`;
+    await sql`CREATE INDEX idx_novels_created_at ON novels(created_at DESC);`;
+    await sql`CREATE INDEX idx_chapters_created_at ON chapters(created_at DESC);`;
 
     await sql`COMMIT`;
   } catch (error) {
@@ -109,47 +114,37 @@ const createSchema = async () => {
   }
 };
 
-// Функция для вставки тестовых данных
+// Seed initial data
 const seedData = async () => {
   await sql`BEGIN`;
   try {
-    // Создаем пользователя и переводчика
-    await sql`INSERT INTO users (id, name) VALUES (12345, 'Test User')`;
-    
-    const { rows: [translator] } = await sql`
-      INSERT INTO translators (name, description, user_id)
-      VALUES ('Саня', 'Повседневность и университеты.', 12345)
-      RETURNING id`;
+    // Users
+    await sql`INSERT INTO users (id, name, photo_url) VALUES 
+      (12345, 'Test User', NULL),
+      (12346, 'Sample User', 'https://example.com/photo.png');`;
 
-    // Создаем новеллу
-    const { rows: [novel] } = await sql`
-      INSERT INTO novels (title, description, status, translator_id)
-      VALUES (
-        'Университет: Начало',
-        'История о студенте, который внезапно обнаруживает древние тайны.',
-        'в процессе',
-        ${translator.id}
-      )
-      RETURNING id`;
+    // Translators
+    await sql`INSERT INTO translators (name, description, user_id) VALUES 
+      ('Test Translator', 'Focused on modern fiction.', 12345);`;
 
-    // Создаем и привязываем теги
-    await sql`INSERT INTO tags (name) VALUES ('повседневность'), ('триллер')`;
-    
-    // Привязываем теги к новелле
-    await sql`INSERT INTO novel_tags (novel_id, tag_id)
-             SELECT ${novel.id}, id FROM tags`;
+    // Novels
+    const { rows: [novel] } = await sql`INSERT INTO novels (title, description, status, translator_id) VALUES 
+      ('Mystery of the Old House', 'A gripping thriller.', 'ongoing', 1)
+      RETURNING id;`;
 
-    // Добавляем главы
-    const { rows: [chapter] } = await sql`
-      INSERT INTO chapters (novel_id, number, title, content)
-      VALUES 
-        (${novel.id}, 1, 'Начало', 'Первая глава...')
-      RETURNING id`;
+    // Tags
+    await sql`INSERT INTO tags (name) VALUES ('thriller'), ('mystery');`;
 
-    // Добавляем комментарий
-    await sql`
-      INSERT INTO chapter_comments (chapter_id, user_id, content)
-      VALUES (${chapter.id}, 12345, 'Отличное начало!')`;
+    // Novel Tags
+    await sql`INSERT INTO novel_tags (novel_id, tag_id) SELECT ${novel.id}, id FROM tags;`;
+
+    // Chapters
+    await sql`INSERT INTO chapters (novel_id, number, title, content) VALUES 
+      (${novel.id}, 1, 'The Beginning', 'It all started on a stormy night...');`;
+
+    // Comments
+    await sql`INSERT INTO chapter_comments (chapter_id, user_id, content) VALUES 
+      (1, 12345, 'Amazing start!');`;
 
     await sql`COMMIT`;
   } catch (error) {
@@ -163,9 +158,9 @@ export default async function handler(request) {
     return new Response(JSON.stringify({
       success: false,
       error: 'Method not allowed'
-    }), { 
+    }), {
       status: 405,
-      headers: { 
+      headers: {
         'Content-Type': 'application/json',
         'Access-Control-Allow-Origin': '*'
       }
@@ -173,13 +168,12 @@ export default async function handler(request) {
   }
 
   try {
-    // Выполняем операции последовательно
     console.log('Dropping tables...');
     await dropTables();
-    
+
     console.log('Creating schema...');
     await createSchema();
-    
+
     console.log('Seeding data...');
     await seedData();
 
@@ -187,12 +181,11 @@ export default async function handler(request) {
       success: true,
       message: 'Database initialized successfully'
     }), {
-      headers: { 
+      headers: {
         'Content-Type': 'application/json',
         'Access-Control-Allow-Origin': '*'
       }
     });
-
   } catch (error) {
     console.error('Database initialization failed:', error);
     return new Response(JSON.stringify({
@@ -201,7 +194,7 @@ export default async function handler(request) {
       stack: error.stack
     }), {
       status: 500,
-      headers: { 
+      headers: {
         'Content-Type': 'application/json',
         'Access-Control-Allow-Origin': '*'
       }
