@@ -6,7 +6,7 @@
       "use": "@vercel/python"
     },
     {
-      "src": "web/index.html",
+      "src": "web/**",
       "use": "@vercel/static"
     }
   ],
@@ -16,11 +16,11 @@
       "dest": "api/main.py"
     },
     {
+      "handle": "filesystem"
+    },
+    {
       "src": "/(.*)",
       "dest": "web/index.html"
     }
-  ],
-  "env": {
-    "TELEGRAM_TOKEN": "@telegram-token"
-  }
+  ]
 }
