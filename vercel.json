@@ -2,6 +2,13 @@
   "version": 2,
   "builds": [
     {
+      "src": "build.sh",
+      "use": "@vercel/static-build",
+      "config": {
+        "distDir": "public"
+      }
+    },
+    {
       "src": "api/main.py",
       "use": "@vercel/python"
     },
@@ -22,5 +29,8 @@
       "src": "/(.*)",
       "dest": "web/index.html"
     }
-  ]
+  ],
+  "env": {
+    "TELEGRAM_TOKEN": "@telegram-token"
+  }
 }
