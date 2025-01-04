@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import WebApp from '@telegram-web-apps/sdk';
+import MainLayout from '@/components/layouts/main-layout';
+import NovelCard from '@/components/ui/novel-card';
 
 interface Novel {
   id: number;
@@ -19,52 +21,44 @@ export default function Home() {
     
     // Fetch novels
     const fetchNovels = async () => {
-      const response = await fetch('/api/novels');
-      const data = await response.json();
-      setNovels(data);
+      try {
+        const response = await fetch('/api/novels');
+        if (!response.ok) {
+          throw new Error('Failed to fetch novels');
+        }
+        const data = await response.json();
+        setNovels(data);
+      } catch (error) {
+        console.error('Error fetching novels:', error);
+        // Можно добавить состояние ошибки и показывать его пользователю
+      }
     };
 
     fetchNovels();
   }, []);
 
   return (
-    <main className="min-h-screen bg-gray-100 p-4">
-      <header className="flex items-center gap-3 mb-6">
-        <div className="w-12 h-12 bg-gray-200 rounded-full overflow-hidden">
-          <img 
-            src="/profile-pic.jpg" 
-            alt="Translator profile" 
-            className="w-full h-full object-cover"
-          />
-        </div>
-        <div>
-          <h1 className="text-xl font-semibold">Саня</h1>
-          <p className="text-gray-600 text-sm">переводчик</p>
-        </div>
-      </header>
-
+    <MainLayout>
       <h2 className="text-lg font-medium mb-4">Все переводы</h2>
-      
       <div className="space-y-3">
         {novels.map((novel) => (
-          <div 
+          <NovelCard
             key={novel.id}
-            className="bg-white rounded-lg p-3 flex gap-3 shadow-sm"
-          >
-            <div className="w-16 h-20 bg-gray-200 rounded overflow-hidden flex-shrink-0">
-              <img
-                src={novel.coverUrl}
-                alt={novel.title}
-                className="w-full h-full object-cover"
-              />
-            </div>
-            <div className="flex-1">
-              <h3 className="font-medium mb-1">{novel.title}</h3>
-              <p className="text-sm text-gray-600">перевод: {novel.status}</p>
-            </div>
-          </div>
+            title={novel.title}
+            coverUrl={novel.coverUrl}
+            status={novel.status}
+            onClick={() => {
+              // Навигация к деталям новеллы
+              console.log(`Clicked novel: ${novel.id}`);
+            }}
+          />
         ))}
       </div>
-    </main>
+      {novels.length === 0 && (
+        <p className="text-gray-500 text-center py-8">
+          Загрузка переводов...
+        </p>
+      )}
+    </MainLayout>
   );
 }
